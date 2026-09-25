@@ -4,9 +4,9 @@ services:
     container_name: ai_platform_postgres
     restart: always
     environment:
-      POSTGRES_USER: ai_user
-      POSTGRES_PASSWORD: ai_password
-      POSTGRES_DB: ai_platform_db
+      POSTGRES_USER: ${POSTGRES_USER:-ai_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ai_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_platform_db}
     ports:
       - "5433:5432"
     volumes:
@@ -28,13 +28,13 @@ services:
     container_name: ai_platform_backend
     restart: always
     environment:
-      - POSTGRES_SERVER=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=ai_user
-      - POSTGRES_PASSWORD=ai_password
-      - POSTGRES_DB=ai_platform_db
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - POSTGRES_SERVER=${POSTGRES_SERVER:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-ai_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ai_password}
+      - POSTGRES_DB=${POSTGRES_DB:-ai_platform_db}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
     ports:
       - "8000:8000"
     depends_on:
@@ -43,14 +43,14 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: ai_platform_frontend
     restart: always
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     depends_on:
       - backend
 
