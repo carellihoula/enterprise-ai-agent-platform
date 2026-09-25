@@ -1,1 +1,40 @@
-# Cleaned for fresh start
+"""FastAPI application entry point for the Enterprise AI Agent Platform API.
+
+This module initializes the core FastAPI web application, registers route routers,
+configures exception handlers, and defines baseline system health endpoints.
+"""
+
+from typing import Any
+
+from fastapi import FastAPI, status
+
+from app.core.config import get_settings
+from app.core.errors import register_exception_handlers
+
+# [Initialization] Load global settings singleton
+settings = get_settings()
+
+# [Application] Instantiate primary FastAPI app instance
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+# [Security] Register domain exception handlers for uniform error formatting
+register_exception_handlers(app)
+
+
+@app.get("/health", status_code=status.HTTP_200_OK)
+async def health_check() -> dict[str, Any]:
+    """Health check endpoint to verify system status and environment configuration.
+
+    Returns:
+        Dict[str, Any]: Dictionary containing service status, app name, and environment.
+    """
+    return {
+        "status": "healthy",
+        "app_name": settings.app_name,
+        "environment": settings.environment.value,
+    }

@@ -400,7 +400,7 @@ Je veux arriver à quelque chose ressemblant conceptuellement à :
    │ │ │ │ │ │ │ │ │
   GPT Gemini Mistral Platform Vertex Customer MCP
                           RAG Search APIs
-                           
+
                      ┌───────────────┐
                      │ Sub-agents │
                      └───────────────┘
