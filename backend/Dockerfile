@@ -2,14 +2,16 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# [Dependencies] Copy requirements and install dependencies
 COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
-COPY engine /app/engine
+# [Source Code] Copy packages and backend source code
+COPY packages/engine /app/packages/engine
 COPY backend /app/backend
 
-# Configure le PYTHONPATH pour que les imports 'app' et 'engine' fonctionnent
-ENV PYTHONPATH=/app/backend:/app
+# [Environment] Configure PYTHONPATH to resolve backend and package imports
+ENV PYTHONPATH=/app/backend:/app/packages/engine
 
 EXPOSE 8000
 

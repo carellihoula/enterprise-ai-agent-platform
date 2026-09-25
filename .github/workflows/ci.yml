@@ -56,4 +56,8 @@ jobs:
 
       - name: Build Backend Docker Image
         run: |
-          docker build -t enterprise-ai-platform-backend:ci ./backend
+          docker build -f backend/Dockerfile -t enterprise-ai-platform-backend:ci .
+
+      - name: Build Frontend Docker Image
+        run: |
+          docker build -t enterprise-ai-platform-frontend:ci ./frontend
