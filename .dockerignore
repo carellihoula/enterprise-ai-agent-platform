@@ -1,0 +1,27 @@
+# Git & IDE
+.git
+.gitignore
+.vscode
+.idea
+
+# Node / Next.js
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/build
+frontend/*.log
+
+# Python / Virtualenv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.venv
+venv
+env
+ENV
+.pytest_cache
+
+# OS Files
+.DS_Store
+Thumbs.db
