@@ -15,7 +15,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.providers.llm.base import ChatMessage, MessageRole, ModelResponse
+from app.providers.llm.anthropic import AnthropicProvider
+from app.providers.llm.base import ChatMessage, MessageRole, ModelProvider, ModelResponse
+from app.providers.llm.gemini import GeminiProvider
 from app.providers.llm.openai import OpenAIProvider
 from app.services.session_service import SessionService
 
@@ -67,7 +69,7 @@ class ChatResponse(BaseModel):
     session_id: str | None = Field(default=None, description="Associated session ID if persisted")
 
 
-def _get_provider(provider_name: str, model_name: str) -> OpenAIProvider:
+def _get_provider(provider_name: str, model_name: str) -> ModelProvider:
     """Factory helper to instantiate a concrete ModelProvider instance.
 
     Args:
@@ -75,13 +77,24 @@ def _get_provider(provider_name: str, model_name: str) -> OpenAIProvider:
         model_name (str): Target model identifier.
 
     Returns:
-        OpenAIProvider: Instantiated model provider.
+        ModelProvider: Instantiated model provider.
 
     Raises:
         HTTPException: If an unsupported provider name is specified.
     """
-    if provider_name.lower() in ("openai", "mock"):
+    provider_key = provider_name.lower()
+    if provider_key in ("openai", "mock"):
         return OpenAIProvider(
+            api_key=settings.secret_key,
+            model_name=model_name,
+        )
+    if provider_key in ("anthropic", "claude"):
+        return AnthropicProvider(
+            api_key=settings.secret_key,
+            model_name=model_name,
+        )
+    if provider_key == "gemini":
+        return GeminiProvider(
             api_key=settings.secret_key,
             model_name=model_name,
         )
@@ -89,7 +102,7 @@ def _get_provider(provider_name: str, model_name: str) -> OpenAIProvider:
     # [Validation] Reject unsupported provider names
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Unsupported provider: '{provider_name}'. Supported providers: ['openai', 'mock'].",
+        detail=f"Unsupported provider: '{provider_name}'. Supported providers: ['openai', 'anthropic', 'claude', 'gemini', 'mock'].",
     )
 
 
