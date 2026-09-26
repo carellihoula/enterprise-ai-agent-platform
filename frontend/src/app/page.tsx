@@ -1,16 +1,22 @@
 'use client';
 
 /**
- * AI Chat Playground main page component with static curated model selection.
+ * Enterprise AI Agent Platform - Main Application Shell.
+ * Integrates global Header, collapsible hierarchical Sidebar, Command Palette (⌘K),
+ * Dashboard (Home view), and the interactive Agent Playground.
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Sidebar } from '@/components/Sidebar';
+import { Sidebar, NavTabId } from '@/components/Sidebar';
+import { Header } from '@/components/Header';
+import { CommandPalette } from '@/components/CommandPalette';
+import { DashboardView } from '@/components/dashboard/DashboardView';
 import { ApiKeyModal } from '@/components/ApiKeyModal';
 import { ChatMessageItem } from '@/components/ChatMessageItem';
 import { ChatInput } from '@/components/ChatInput';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
 import { Message, Session, PRESET_PROVIDERS, ModelConfigState } from '@/types/chat';
 import {
   fetchSessions,
@@ -19,9 +25,29 @@ import {
   deleteSession,
   streamChatCompletion,
 } from '@/lib/api';
-import { Bot, PanelLeftOpen, Sparkles, Settings } from 'lucide-react';
+import {
+  Bot,
+  Sparkles,
+  Layers,
+  ArrowRight,
+  Workflow,
+  Database,
+  Wrench,
+  Network,
+  Cpu,
+  Code2,
+  Activity,
+  BarChart3,
+} from 'lucide-react';
 
-export default function ChatPlaygroundPage() {
+export default function EnterpriseAppPage() {
+  // Navigation State
+  const [activeTab, setActiveTab] = useState<NavTabId>('home');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+
+  // Chat and Conversation Session State
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -37,18 +63,30 @@ export default function ChatPlaygroundPage() {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Keyboard shortcut listener for Command Palette (⌘K / Ctrl+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isStreaming]);
+    if (activeTab === 'chat') {
+      scrollToBottom();
+    }
+  }, [messages, isStreaming, activeTab]);
 
   useEffect(() => {
     loadSessions();
@@ -91,6 +129,7 @@ export default function ChatPlaygroundPage() {
       setSessions((prev) => [newSession, ...prev]);
       setCurrentSessionId(newSession.id);
       setMessages([]);
+      setActiveTab('chat');
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to create new conversation');
     }
@@ -109,7 +148,6 @@ export default function ChatPlaygroundPage() {
       setErrorMessage(err.message || 'Failed to delete session');
     }
   };
-
 
   const handleSendMessage = async (content: string) => {
     let activeSessionId = currentSessionId;
@@ -185,69 +223,44 @@ export default function ChatPlaygroundPage() {
     });
   };
 
+  const handleLaunchAgentChat = (agentName: string) => {
+    setActiveTab('chat');
+    // Pre-populate or start a focused session for the agent
+    handleNewSession();
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white text-zinc-900 font-sans">
       {/* Collapsible Sidebar */}
       {isSidebarOpen && (
         <Sidebar
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
           sessions={sessions}
           currentSessionId={currentSessionId}
           onSelectSession={handleSelectSession}
           onNewSession={handleNewSession}
           onDeleteSession={handleDeleteSession}
           isLoadingSessions={isLoadingSessions}
-          onToggleSidebar={() => setIsSidebarOpen(false)}
           onOpenSettings={() => setIsApiKeyModalOpen(true)}
         />
       )}
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-white relative">
-        {/* Top Header Bar */}
-        <header className="border-b border-zinc-200 px-4 py-2.5 flex items-center justify-between bg-white/90 backdrop-blur-md z-10 shrink-0">
-          <div className="flex items-center gap-3">
-            {!isSidebarOpen && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsSidebarOpen(true)}
-                title="Open sidebar"
-                className="h-8 w-8 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 shrink-0"
-              >
-                <PanelLeftOpen className="w-4 h-4" />
-              </Button>
-            )}
+        {/* Global Navigation Header */}
+        <Header
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+          onOpenSettings={() => setIsApiKeyModalOpen(true)}
+          onOpenAgentBuilder={() => setActiveTab('agents')}
+          modelConfig={modelConfig}
+        />
 
-            {/* Active Model Indicator Badge */}
-            <div className="flex items-center gap-2 px-3 py-1 bg-zinc-100 border border-zinc-200 rounded-xl text-xs">
-              <span className="font-semibold text-zinc-900 capitalize">
-                {modelConfig.providerId}
-              </span>
-              <span className="text-zinc-400">/</span>
-              <span className="font-mono text-indigo-600 font-medium">
-                {modelConfig.modelName}
-              </span>
-              <span className="text-[10px] text-zinc-400 bg-white px-1.5 py-0.5 rounded border border-zinc-200">
-                T: {modelConfig.temperature}
-              </span>
-            </div>
-          </div>
-
-          {/* Quick Settings Action */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsApiKeyModalOpen(true)}
-            className="flex items-center gap-1.5 border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 rounded-xl text-xs shadow-sm"
-          >
-            <Settings className="w-3.5 h-3.5 text-zinc-500" />
-            <span>Settings</span>
-          </Button>
-        </header>
-
-        {/* Error Alert Banner */}
+        {/* Global Error Banner */}
         {errorMessage && (
-          <div className="p-3 max-w-3xl mx-auto w-full">
+          <div className="p-3 max-w-4xl mx-auto w-full">
             <Alert variant="destructive" className="flex items-center justify-between">
               <span className="font-medium text-xs">{errorMessage}</span>
               <Button
@@ -262,43 +275,126 @@ export default function ChatPlaygroundPage() {
           </div>
         )}
 
-        {/* Chat Messages */}
-        <div className="flex-1 overflow-y-auto w-full bg-white">
-          {isLoadingMessages ? (
-            <div className="flex items-center justify-center h-full text-zinc-500 gap-2 text-sm">
-              <Sparkles className="w-4 h-4 animate-spin text-indigo-600" />
-              Loading chat history...
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center max-w-md mx-auto space-y-4 p-4">
-              <div className="p-3.5 bg-zinc-100 border border-zinc-200 rounded-full text-zinc-900 shadow-md">
-                <Bot className="w-8 h-8 text-indigo-600" />
+        {/* Screen Routing */}
+        {activeTab === 'home' && (
+          <DashboardView
+            onNavigate={(tab) => setActiveTab(tab)}
+            onOpenAgentBuilder={() => setActiveTab('agents')}
+            onOpenSettings={() => setIsApiKeyModalOpen(true)}
+            onLaunchAgentChat={handleLaunchAgentChat}
+          />
+        )}
+
+        {activeTab === 'chat' && (
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
+            {/* Active Model Indicator Header Sub-bar */}
+            <div className="px-6 py-2 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-zinc-500 font-medium">Session:</span>
+                <span className="font-semibold text-zinc-800">
+                  {sessions.find((s) => s.id === currentSessionId)?.title || 'New Conversation'}
+                </span>
               </div>
-              <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">
-                What can I help with today?
-              </h2>
-              <p className="text-xs text-zinc-500 leading-relaxed max-w-sm">
-                Select OpenAI, Claude, Gemini, or a Custom Provider (Ollama/vLLM) above.
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-[10px] text-zinc-400 bg-white px-2 py-0.5 rounded border border-zinc-200">
+                  Engine: <span className="text-indigo-600 font-mono font-medium">{modelConfig.providerId} / {modelConfig.modelName}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Chat Messages Stream */}
+            <div className="flex-1 overflow-y-auto w-full bg-white">
+              {isLoadingMessages ? (
+                <div className="flex items-center justify-center h-full text-zinc-500 gap-2 text-sm">
+                  <Sparkles className="w-4 h-4 animate-spin text-indigo-600" />
+                  Loading chat history...
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center max-w-md mx-auto space-y-4 p-4">
+                  <div className="p-3.5 bg-zinc-100 border border-zinc-200 rounded-full text-zinc-900 shadow-md">
+                    <Bot className="w-8 h-8 text-indigo-600" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">
+                    What can I help with today?
+                  </h2>
+                  <p className="text-xs text-zinc-500 leading-relaxed max-w-sm">
+                    Test your agents or communicate directly with your configured provider models (Google Vertex, OpenAI, Anthropic, or Local Ollama/vLLM).
+                  </p>
+                </div>
+              ) : (
+                messages.map((msg, index) => (
+                  <ChatMessageItem
+                    key={index}
+                    message={msg}
+                    isStreaming={isStreaming && index === messages.length - 1 && msg.role === 'assistant'}
+                  />
+                ))
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Bottom Prompt Bar */}
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              isLoading={isStreaming}
+            />
+          </div>
+        )}
+
+        {/* Placeholder Views for Upcoming Steps (Agents, Workflows, Knowledge, etc.) */}
+        {activeTab !== 'home' && activeTab !== 'chat' && (
+          <div className="flex-1 overflow-y-auto p-8 max-w-4xl mx-auto w-full flex flex-col justify-center items-center text-center space-y-5">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm">
+              {activeTab === 'agents' && <Bot className="w-6 h-6" />}
+              {activeTab === 'workflows' && <Workflow className="w-6 h-6" />}
+              {activeTab === 'knowledge' && <Database className="w-6 h-6" />}
+              {activeTab === 'tools' && <Wrench className="w-6 h-6" />}
+              {activeTab === 'mcp' && <Network className="w-6 h-6" />}
+              {activeTab === 'models' && <Cpu className="w-6 h-6" />}
+              {activeTab === 'api' && <Code2 className="w-6 h-6" />}
+              {activeTab === 'logs' && <Activity className="w-6 h-6" />}
+              {activeTab === 'usage' && <BarChart3 className="w-6 h-6" />}
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-bold text-zinc-900 capitalize">
+                {activeTab} Management Module
+              </h3>
+              <p className="text-xs text-zinc-500 max-w-md">
+                This module is next in sequence according to the step-by-step implementation roadmap of interface.md.
               </p>
             </div>
-          ) : (
-            messages.map((msg, index) => (
-              <ChatMessageItem
-                key={index}
-                message={msg}
-                isStreaming={isStreaming && index === messages.length - 1 && msg.role === 'assistant'}
-              />
-            ))
-          )}
-          <div ref={messagesEndRef} />
-        </div>
 
-        {/* Bottom Prompt Bar */}
-        <ChatInput
-          onSendMessage={handleSendMessage}
-          isLoading={isStreaming}
-        />
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setActiveTab('home')}
+                className="rounded-xl text-xs border-zinc-200"
+              >
+                Return to Dashboard
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setActiveTab('chat')}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs gap-1.5"
+              >
+                <span>Open Playground</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* Global Command Palette Dialog (⌘K / Ctrl+K) */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onNavigate={(tab) => setActiveTab(tab as NavTabId)}
+        onOpenSettings={() => setIsApiKeyModalOpen(true)}
+        onOpenAgentBuilder={() => setActiveTab('agents')}
+      />
 
       {/* Unified Settings & Model Configuration Modal */}
       <ApiKeyModal
