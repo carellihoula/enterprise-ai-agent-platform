@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import FastAPI, status
 
+from app.api.v1.chat import router as chat_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 
@@ -25,13 +26,16 @@ app = FastAPI(
 # [Security] Register domain exception handlers for uniform error formatting
 register_exception_handlers(app)
 
+# [Routing] Include API v1 routers
+app.include_router(chat_router, prefix=settings.api_v1_prefix)
+
 
 @app.get("/health", status_code=status.HTTP_200_OK)
 async def health_check() -> dict[str, Any]:
     """Health check endpoint to verify system status and environment configuration.
 
     Returns:
-        Dict[str, Any]: Dictionary containing service status, app name, and environment.
+        dict[str, Any]: Dictionary containing service status, app name, and environment.
     """
     return {
         "status": "healthy",
