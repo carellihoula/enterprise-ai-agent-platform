@@ -5,21 +5,28 @@ with LLM providers behind the ModelProvider abstraction layer.
 """
 
 import json
+import logging
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.database import get_db
-from app.providers.llm.anthropic import AnthropicProvider
-from app.providers.llm.base import ChatMessage, MessageRole, ModelProvider, ModelResponse
-from app.providers.llm.gemini import GeminiProvider
-from app.providers.llm.openai import OpenAIProvider
+from app.core.database import SessionLocal, get_db
+from app.providers.llm.base import (
+    ChatMessage,
+    MessageRole,
+    ModelConfig,
+    ModelProvider,
+    ModelResponse,
+)
+from app.providers.llm.langchain_provider import ProviderAdapterRegistry
 from app.services.session_service import SessionService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 settings = get_settings()
@@ -30,12 +37,14 @@ class ChatRequest(BaseModel):
 
     Attributes:
         messages (list[ChatMessage]): Conversation history messages.
-        provider_name (str): Identifier of the model provider (e.g., openai, gemini, mock).
+        provider_name (str): Identifier of the model provider (e.g., openai, gemini, anthropic, custom).
         model_name (str): Model version identifier.
         temperature (float): Sampling temperature value between 0.0 and 2.0.
         max_tokens (int | None): Optional upper bound on completion tokens.
         system_instruction (str | None): Optional system prompt instructions.
         session_id (str | None): Optional conversation session UUID for message persistence.
+        api_key (str | None): Optional client-provided API key for the selected provider.
+        base_url (str | None): Optional client-provided custom base URL (e.g., Ollama or vLLM).
     """
 
     messages: list[ChatMessage] = Field(
@@ -47,6 +56,8 @@ class ChatRequest(BaseModel):
     max_tokens: int | None = Field(default=None, description="Max completion tokens limit")
     system_instruction: str | None = Field(default=None, description="System prompt instructions")
     session_id: str | None = Field(default=None, description="Optional session ID for persistence")
+    api_key: str | None = Field(default=None, description="Optional client API key")
+    base_url: str | None = Field(default=None, description="Optional custom base URL endpoint")
 
 
 class ChatResponse(BaseModel):
@@ -69,41 +80,69 @@ class ChatResponse(BaseModel):
     session_id: str | None = Field(default=None, description="Associated session ID if persisted")
 
 
-def _get_provider(provider_name: str, model_name: str) -> ModelProvider:
-    """Factory helper to instantiate a concrete ModelProvider instance.
+def _get_provider(
+    provider_name: str,
+    model_name: str = "",
+    api_key: str | None = None,
+    base_url: str | None = None,
+    temperature: float = 0.7,
+    max_tokens: int | None = None,
+    system_instruction: str | None = None,
+) -> ModelProvider:
+    """Factory helper to instantiate a concrete ModelProvider instance via ProviderAdapterRegistry.
 
     Args:
         provider_name (str): Name of the target provider.
         model_name (str): Target model identifier.
+        api_key (str | None): Optional client-supplied API key.
+        base_url (str | None): Optional client-supplied Base URL endpoint.
+        temperature (float): Sampling temperature value.
+        max_tokens (int | None): Max token generation limit.
+        system_instruction (str | None): Optional system prompt text.
 
     Returns:
         ModelProvider: Instantiated model provider.
-
-    Raises:
-        HTTPException: If an unsupported provider name is specified.
     """
-    provider_key = provider_name.lower()
-    if provider_key in ("openai", "mock"):
-        return OpenAIProvider(
-            api_key=settings.secret_key,
-            model_name=model_name,
-        )
-    if provider_key in ("anthropic", "claude"):
-        return AnthropicProvider(
-            api_key=settings.secret_key,
-            model_name=model_name,
-        )
-    if provider_key == "gemini":
-        return GeminiProvider(
-            api_key=settings.secret_key,
-            model_name=model_name,
+    config = ModelConfig(
+        provider_id=provider_name,
+        model_name=model_name or "gpt-4o",
+        temperature=temperature,
+        max_tokens=max_tokens,
+        system_prompt=system_instruction,
+        base_url=base_url,
+        api_key=api_key,
+    )
+    return ProviderAdapterRegistry.get_provider(config)
+
+
+class ProviderModelsResponse(BaseModel):
+    """Response model listing available models for a provider."""
+
+    provider_name: str = Field(description="Canonical provider name")
+    models: list[str] = Field(description="Available model identifiers")
+
+
+@router.get("/models", response_model=list[ProviderModelsResponse], status_code=status.HTTP_200_OK)
+async def list_available_models() -> list[ProviderModelsResponse]:
+    """Endpoint listing all supported providers and their dynamically fetched models.
+
+    Returns:
+        list[ProviderModelsResponse]: List of provider model availability objects.
+    """
+    supported_providers = ["openai", "anthropic", "gemini"]
+    result: list[ProviderModelsResponse] = []
+
+    for provider_name in supported_providers:
+        provider_obj = _get_provider(provider_name)
+        models_list = await provider_obj.list_models()
+        result.append(
+            ProviderModelsResponse(
+                provider_name=provider_name,
+                models=models_list,
+            )
         )
 
-    # [Validation] Reject unsupported provider names
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Unsupported provider: '{provider_name}'. Supported providers: ['openai', 'anthropic', 'claude', 'gemini', 'mock'].",
-    )
+    return result
 
 
 def _prepare_messages_context(
@@ -155,7 +194,15 @@ async def generate_chat(
         ProviderError: If the model provider endpoint fails.
         DomainError: If the specified session_id is not found.
     """
-    provider = _get_provider(request.provider_name, request.model_name)
+    provider = _get_provider(
+        request.provider_name,
+        request.model_name,
+        api_key=request.api_key,
+        base_url=request.base_url,
+        temperature=request.temperature,
+        max_tokens=request.max_tokens,
+        system_instruction=request.system_instruction,
+    )
     full_messages, target_session_id = _prepare_messages_context(
         request.messages, request.session_id, db
     )
@@ -202,7 +249,15 @@ async def stream_chat(
     Returns:
         StreamingResponse: SSE stream formatted with text/event-stream MIME type.
     """
-    provider = _get_provider(request.provider_name, request.model_name)
+    provider = _get_provider(
+        request.provider_name,
+        request.model_name,
+        api_key=request.api_key,
+        base_url=request.base_url,
+        temperature=request.temperature,
+        max_tokens=request.max_tokens,
+        system_instruction=request.system_instruction,
+    )
     full_messages, target_session_id = _prepare_messages_context(
         request.messages, request.session_id, db
     )
@@ -210,6 +265,9 @@ async def stream_chat(
     async def event_generator() -> AsyncGenerator[str, None]:
         """Async generator formatting chunks into SSE event lines and persisting messages."""
         accumulated_content = ""
+        logger.info(
+            f"[Stream] Starting stream for provider='{request.provider_name}', model='{request.model_name}'"
+        )
         try:
             async for chunk in provider.stream(
                 messages=full_messages,
@@ -224,15 +282,23 @@ async def stream_chat(
                 }
                 yield f"data: {json.dumps(payload)}\n\n"
 
-            # [Persistence] Store complete conversation exchange after stream finishes
-            if target_session_id:
-                service = SessionService(db)
-                for msg in request.messages:
-                    service.add_message(target_session_id, msg.role, msg.content)
-                service.add_message(target_session_id, "assistant", accumulated_content)
+            logger.info(f"[Stream] Stream completed. Generated length={len(accumulated_content)}")
+
+            # [Persistence] Store complete conversation exchange after stream finishes using dedicated DB session
+            if target_session_id and accumulated_content:
+                db_session = SessionLocal()
+                try:
+                    service = SessionService(db_session)
+                    for msg in request.messages:
+                        service.add_message(target_session_id, msg.role, msg.content)
+                    service.add_message(target_session_id, "assistant", accumulated_content)
+                    logger.info(f"[Stream] Saved messages to session_id='{target_session_id}'")
+                finally:
+                    db_session.close()
 
             yield "data: [DONE]\n\n"
         except Exception as exc:
+            logger.error(f"[Stream ERROR] {exc}", exc_info=True)
             error_payload = {"error": str(exc)}
             yield f"data: {json.dumps(error_payload)}\n\n"
 

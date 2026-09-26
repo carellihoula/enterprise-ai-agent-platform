@@ -27,14 +27,16 @@ services:
       dockerfile: backend/Dockerfile
     container_name: ai_platform_backend
     restart: always
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment:
-      - POSTGRES_SERVER=${POSTGRES_SERVER:-postgres}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-ai_user}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ai_password}
       - POSTGRES_DB=${POSTGRES_DB:-ai_platform_db}
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-ai_user}:${POSTGRES_PASSWORD:-ai_password}@postgres:5432/${POSTGRES_DB:-ai_platform_db}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     ports:
       - "8000:8000"
     depends_on:
@@ -50,7 +52,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
     depends_on:
       - backend
 

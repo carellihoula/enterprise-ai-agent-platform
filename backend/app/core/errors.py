@@ -88,7 +88,7 @@ class ToolError(PlatformError):
         message: str,
         tool_name: str,
         error_code: str = "TOOL_EXECUTION_ERROR",
-        status_code: int = status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code: int = status.HTTP_422_UNPROCESSABLE_CONTENT,
         details: dict[str, Any] | None = None,
         retryable: bool = False,
     ) -> None:

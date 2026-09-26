@@ -54,3 +54,18 @@ if request_hash in self._response_cache:
 
 ## 4. Preservation & Integrity
 - Always preserve existing comments and docstrings during refactoring unless the underlying technical contract has changed.
+
+---
+
+## 5. Frontend UI Component & Icon Standards
+- **shadcn/ui & Tailwind CSS**: Always use **shadcn/ui** primitives and Tailwind CSS for frontend components instead of building UI components from scratch.
+- **Lucide React Icons**: Use `lucide-react` icons for UI elements and visual indicators.
+- **No Emojis**: Do NOT use raw emojis in UI code, buttons, or layouts; replace them with proper `lucide-react` SVG icon components.
+
+---
+
+## 6. Database Migration Standards (Alembic)
+- **Alembic Command Generation**: NEVER create, edit, or write database migration files manually. Always use Alembic CLI commands to inspect models and generate migration revisions.
+  - To generate a new migration revision: `uv run alembic revision --autogenerate -m "<descriptive_message>"`
+  - To apply migrations: `uv run alembic upgrade head`
+- **ORM Model Single Source of Truth**: Update SQLAlchemy ORM entity models in `backend/app/models/` first, then run Alembic autogenerate to capture the DDL changes cleanly.

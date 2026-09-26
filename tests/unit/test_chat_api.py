@@ -5,7 +5,8 @@ endpoints via the FastAPI TestClient.
 """
 
 from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import status
@@ -16,19 +17,21 @@ from app.providers.llm.base import ModelResponse, ModelResponseChunk, TokenUsage
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-@patch("app.api.v1.chat.OpenAIProvider.generate")
-async def test_generate_chat_endpoint(mock_generate: AsyncMock, api_client: TestClient) -> None:
+@patch("app.api.v1.chat.ProviderAdapterRegistry.get_provider")
+async def test_generate_chat_endpoint(mock_get_provider: AsyncMock, api_client: TestClient) -> None:
     """Tests POST /api/v1/chat synchronous completion endpoint.
 
     Args:
-        mock_generate (AsyncMock): Mocked generate method on OpenAIProvider.
+        mock_get_provider (AsyncMock): Mocked get_provider method on ProviderAdapterRegistry.
         api_client (TestClient): TestClient fixture instance.
     """
-    mock_generate.return_value = ModelResponse(
+    mock_provider = AsyncMock()
+    mock_provider.generate.return_value = ModelResponse(
         content="Hello from API!",
         model_name="gpt-4o",
         usage=TokenUsage(prompt_tokens=5, completion_tokens=8, total_tokens=13),
     )
+    mock_get_provider.return_value = mock_provider
 
     payload = {
         "messages": [{"role": "user", "content": "Hello"}],
@@ -49,8 +52,8 @@ async def test_generate_chat_endpoint(mock_generate: AsyncMock, api_client: Test
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-@patch("app.api.v1.chat.OpenAIProvider.stream")
-async def test_stream_chat_endpoint(mock_stream: AsyncMock, api_client: TestClient) -> None:
+@patch("app.api.v1.chat.ProviderAdapterRegistry.get_provider")
+async def test_stream_chat_endpoint(mock_get_provider: AsyncMock, api_client: TestClient) -> None:
     """Tests POST /api/v1/chat/stream SSE streaming endpoint.
 
     Args:
@@ -58,11 +61,13 @@ async def test_stream_chat_endpoint(mock_stream: AsyncMock, api_client: TestClie
         api_client (TestClient): TestClient fixture instance.
     """
 
-    async def mock_chunks() -> AsyncGenerator[ModelResponseChunk, None]:
+    async def mock_chunks(*args: Any, **kwargs: Any) -> AsyncGenerator[ModelResponseChunk, None]:
         yield ModelResponseChunk(delta_content="Hello ")
         yield ModelResponseChunk(delta_content="World!", finish_reason="stop")
 
-    mock_stream.return_value = mock_chunks()
+    mock_provider = MagicMock()
+    mock_provider.stream.side_effect = mock_chunks
+    mock_get_provider.return_value = mock_provider
 
     payload = {
         "messages": [{"role": "user", "content": "Stream me"}],

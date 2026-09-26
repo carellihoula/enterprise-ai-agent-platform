@@ -1,16 +1,23 @@
+FROM ghcr.io/astral-sh/uv:latest AS uv
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# [Dependencies] Copy requirements and install dependencies
-COPY backend/requirements.txt /app/backend/requirements.txt
-RUN pip install --no-cache-dir -r /app/backend/requirements.txt
+# Copy uv binary from official image for ultra-fast installs
+COPY --from=uv /uv /uvx /bin/
+
+# [Dependencies] Copy project metadata, lockfile, and README.md
+COPY pyproject.toml uv.lock README.md ./
+
+# [Install] Sync dependencies using uv
+RUN uv sync --frozen --no-dev
 
 # [Source Code] Copy packages and backend source code
-COPY packages/engine /app/packages/engine
+COPY packages /app/packages
 COPY backend /app/backend
 
-# [Environment] Configure PYTHONPATH to resolve backend and package imports
+# [Environment] Activate uv virtualenv & set PYTHONPATH
+ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app/backend:/app/packages/engine
 
 EXPOSE 8000

@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.core.database import SessionLocal, init_db
 from app.core.errors import DomainError
+from app.providers.llm.base import ModelResponse, TokenUsage
 from app.services.session_service import SessionService
 
 
@@ -103,16 +104,16 @@ def test_chat_with_session_persistence(api_client: TestClient) -> None:
     create_res = api_client.post("/api/v1/sessions", json={"title": "Chat Persistence Session"})
     session_id = create_res.json()["id"]
 
-    # 2. Mock OpenAIProvider.generate to return deterministic response
-    with patch("app.api.v1.chat.OpenAIProvider") as mock_provider_cls:
+    # 2. Mock ProviderAdapterRegistry.get_provider to return deterministic response
+    with patch("app.api.v1.chat.ProviderAdapterRegistry.get_provider") as mock_get_provider:
         mock_instance = AsyncMock()
-        mock_instance.generate.return_value = AsyncMock(
+        mock_instance.generate.return_value = ModelResponse(
             content="I am an AI assistant.",
             model_name="gpt-4o",
-            usage=AsyncMock(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+            usage=TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
             finish_reason="stop",
         )
-        mock_provider_cls.return_value = mock_instance
+        mock_get_provider.return_value = mock_instance
 
         # Send chat request attached to session_id
         chat_res = api_client.post(

@@ -61,6 +61,10 @@ class MockModelProvider(ModelProvider):
             finish_reason = "stop" if idx == len(chunks) - 1 else None
             yield ModelResponseChunk(delta_content=chunk, finish_reason=finish_reason)
 
+    async def list_models(self) -> list[str]:
+        """Returns mock model list."""
+        return [self.model_name, "mock-model-v2"]
+
     def get_model_info(self) -> ModelInfo:
         """Returns mock model info."""
         return ModelInfo(

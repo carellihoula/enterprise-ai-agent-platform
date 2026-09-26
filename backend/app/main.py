@@ -4,17 +4,33 @@ This module initializes the core FastAPI web application, registers route router
 configures exception handlers, and defines baseline system health endpoints.
 """
 
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, status
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.chat import router as chat_router
 from app.api.v1.sessions import router as sessions_router
 from app.core.config import get_settings
+from app.core.database import init_db
 from app.core.errors import register_exception_handlers
 
 # [Initialization] Load global settings singleton
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> Any:
+    """Lifespan event handler managing application startup and shutdown operations.
+
+    Args:
+        app (FastAPI): The FastAPI application instance.
+    """
+    # [Database] Initialize database schema and tables on startup
+    init_db()
+    yield
+
 
 # [Application] Instantiate primary FastAPI app instance
 app = FastAPI(
@@ -22,6 +38,16 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
+)
+
+# [CORS] Configure Cross-Origin Resource Sharing for frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # [Security] Register domain exception handlers for uniform error formatting

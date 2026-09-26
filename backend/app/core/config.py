@@ -56,6 +56,18 @@ class Settings(BaseSettings):
         default=SecretStr("insecure-default-change-in-production"),
         description="Secret key for security operations",
     )
+    openai_api_key: SecretStr | None = Field(
+        default=None,
+        description="API key secret for OpenAI provider",
+    )
+    gemini_api_key: SecretStr | None = Field(
+        default=None,
+        description="API key secret for Google Gemini provider",
+    )
+    anthropic_api_key: SecretStr | None = Field(
+        default=None,
+        description="API key secret for Anthropic Claude provider",
+    )
     database_url: SecretStr = Field(
         default=SecretStr("sqlite:///./platform.db"),
         description="Database connection URI",

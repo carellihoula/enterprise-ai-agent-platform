@@ -44,7 +44,7 @@ def test_tool_error_attributes() -> None:
     )
     assert error.message == "HTTP tool failed with status 500"
     assert error.details["tool_name"] == "http_request"
-    assert error.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert error.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
     assert error.retryable is False
 
 

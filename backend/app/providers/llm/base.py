@@ -22,6 +22,43 @@ class MessageRole(StrEnum):
     TOOL = "tool"
 
 
+class ModelCapability(StrEnum):
+    """Enumeration of feature capabilities supported by LLM endpoints."""
+
+    TEXT_GENERATION = "text_generation"
+    STREAMING = "streaming"
+    FUNCTION_CALLING = "function_calling"
+    STRUCTURED_OUTPUT = "structured_output"
+    VISION = "vision"
+    EMBEDDINGS = "embeddings"
+
+
+class ModelConfig(BaseModel):
+    """Dynamic runtime execution configuration for a model provider instance.
+
+    Attributes:
+        provider_id (str): Identifier of target provider adapter (e.g., openai, gemini, anthropic, custom).
+        model_name (str): Target model identifier string (e.g., gpt-4o, gemini-1.5-pro, llama-3-70b).
+        temperature (float): Sampling temperature value between 0.0 and 2.0.
+        max_tokens (int | None): Optional upper bound on generated completion tokens.
+        system_prompt (str | None): Optional system prompt instructions.
+        base_url (str | None): Optional custom HTTP base URL for local/private endpoints.
+        api_key (str | None): Optional client-provided API key.
+        provider_params (dict[str, Any]): Arbitrary provider-specific keyword parameters.
+    """
+
+    provider_id: str = Field(default="openai", description="Target provider adapter identifier")
+    model_name: str = Field(default="gpt-4o", description="Target model version identifier")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
+    max_tokens: int | None = Field(default=None, description="Max completion token limit")
+    system_prompt: str | None = Field(default=None, description="System prompt instructions")
+    base_url: str | None = Field(default=None, description="Custom HTTP base URL endpoint")
+    api_key: str | None = Field(default=None, description="Client API key secret override")
+    provider_params: dict[str, Any] = Field(
+        default_factory=dict, description="Arbitrary provider extension parameters"
+    )
+
+
 class ChatMessage(BaseModel):
     """Data model representing a single chat message payload.
 
@@ -180,6 +217,15 @@ class ModelProvider(ABC):
 
         Returns:
             ModelInfo: Standardized model specification object.
+        """
+        pass
+
+    @abstractmethod
+    async def list_models(self) -> list[str]:
+        """Lists available models exposed by the target provider endpoint.
+
+        Returns:
+            list[str]: List of model string identifiers.
         """
         pass
 
