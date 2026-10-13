@@ -69,3 +69,21 @@ if request_hash in self._response_cache:
   - To generate a new migration revision: `uv run alembic revision --autogenerate -m "<descriptive_message>"`
   - To apply migrations: `uv run alembic upgrade head`
 - **ORM Model Single Source of Truth**: Update SQLAlchemy ORM entity models in `backend/app/models/` first, then run Alembic autogenerate to capture the DDL changes cleanly.
+
+---
+
+## 7. React Component Architecture & Modularization Standards (Mandatory)
+- **Strict Prohibition of Monolithic Files**: NEVER write or maintain monolithic component files exceeding 250–300 lines of code. Monster files (500–1000+ lines) are strictly prohibited.
+- **Component Decomposition & Single Responsibility**:
+  - Every component must have a single, clearly defined responsibility.
+  - Break complex screens and views into small, focused sub-components organized in dedicated feature subdirectories (e.g., `components/<feature_name>/` or `components/assistant-config/`).
+  - Use `index.ts` barrel files to group and cleanly re-export related sub-components.
+- **Separation of Concerns**:
+  - **Containers / Orchestrators**: Manage state, effects, API integration, and business logic.
+  - **Presentational Sub-Components**: Accept typed props, remain purely presentational, and emit events via callbacks.
+  - **Custom Hooks**: Extract complex lifecycle logic, local storage synchronization, or data streaming into reusable custom hooks (e.g., `hooks/useChatSession.ts`, `hooks/useModelConfig.ts`).
+- **Composition over Large JSX Trees**:
+  - Assemble UIs through component composition (slots, `children`, composable cards, sections, and items) rather than deeply nested inline JSX blocks.
+  - Sub-views (e.g., headers, credential panels, model list selectors, slider controls) must reside in separate files and be assembled at the parent view level.
+- **Targeted Performance & Memoization**:
+  - Small, isolated components localize re-renders, preventing expensive full-tree recalculations during real-time LLM token streaming and rapid user input events.

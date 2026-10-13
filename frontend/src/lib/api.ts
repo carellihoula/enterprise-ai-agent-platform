@@ -6,6 +6,7 @@
  */
 
 import { Message, Session } from '@/types/chat';
+import { cleanSerializedContentBlocks } from '@/lib/utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
@@ -56,6 +57,7 @@ export interface StreamChatParams {
   systemInstruction?: string;
   apiKey?: string;
   baseUrl?: string;
+  abortSignal?: AbortSignal;
   onChunk: (delta: string) => void;
   onFinish?: () => void;
   onError?: (error: Error) => void;
@@ -71,6 +73,7 @@ export async function streamChatCompletion({
   systemInstruction,
   apiKey,
   baseUrl,
+  abortSignal,
   onChunk,
   onFinish,
   onError,
@@ -79,6 +82,7 @@ export async function streamChatCompletion({
     const response = await fetch(`${API_BASE_URL}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: abortSignal,
       body: JSON.stringify({
         session_id: sessionId,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
@@ -130,7 +134,12 @@ export async function streamChatCompletion({
             if (parsed.error) {
               streamError = new Error(parsed.error);
             } else if (parsed.delta_content !== undefined && parsed.delta_content !== null) {
-              onChunk(parsed.delta_content);
+              // [Parsing] Normalize any serialized content blocks to pure text
+              const rawDelta = String(parsed.delta_content);
+              const cleaned = cleanSerializedContentBlocks(rawDelta);
+              if (cleaned) {
+                onChunk(cleaned);
+              }
             }
           } catch (e) {
             // Ignore partial JSON parsing errors

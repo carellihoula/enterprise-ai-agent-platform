@@ -271,28 +271,6 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
           <div className="space-y-2.5">
             <div className="space-y-1">
-              <Label className="text-[11px] font-medium text-zinc-700">OpenAI API Key</Label>
-              <input
-                type="password"
-                placeholder="sk-..."
-                value={openaiKey}
-                onChange={(e) => setOpenaiKey(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-[11px] font-medium text-zinc-700">Anthropic Claude API Key</Label>
-              <input
-                type="password"
-                placeholder="sk-ant-..."
-                value={anthropicKey}
-                onChange={(e) => setAnthropicKey(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
-            </div>
-
-            <div className="space-y-1">
               <Label className="text-[11px] font-medium text-zinc-700">Google Gemini API Key</Label>
               <input
                 type="password"
@@ -301,28 +279,9 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 onChange={(e) => setGeminiKey(e.target.value)}
                 className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
-            </div>
-
-            <div className="pt-2 border-t border-zinc-200/60 space-y-2">
-              <Label className="text-[11px] font-medium text-zinc-700 flex items-center gap-1">
-                <Link className="w-3.5 h-3.5 text-emerald-600" />
-                Custom Provider Base URL (e.g. Ollama, vLLM)
-              </Label>
-              <input
-                type="text"
-                placeholder="http://localhost:11434/v1"
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-              />
-
-              <input
-                type="password"
-                placeholder="Custom Provider API Key (optional)"
-                value={customKey}
-                onChange={(e) => setCustomKey(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-              />
+              <p className="text-[10px] text-zinc-400">
+                Your key is stored securely in your browser localStorage and sent directly to Google Gemini.
+              </p>
             </div>
           </div>
         </div>

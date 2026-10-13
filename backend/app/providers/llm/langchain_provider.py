@@ -87,9 +87,12 @@ class LangChainModelProvider(ModelProvider):
         }
         lc_provider = lc_provider_map.get(provider_id, provider_id)
 
+        # [Model Normalization] Map requested model alias if needed
+        model_name = config.model_name
+
         try:
             kwargs: dict[str, Any] = {
-                "model": config.model_name,
+                "model": model_name,
                 "model_provider": lc_provider,
                 "temperature": config.temperature,
             }
@@ -102,7 +105,16 @@ class LangChainModelProvider(ModelProvider):
 
             return cast(BaseChatModel, init_chat_model(**kwargs, **config.provider_params))
         except Exception as exc:
-            # Fall back to OpenAI-compatible interface if provider lookup fails
+            # [Routing] Do not route non-OpenAI providers (e.g. Gemini, Anthropic) to OpenAI endpoint
+            if lc_provider in ("google_genai", "anthropic"):
+                logger.error(
+                    f"[LangChain] Failed to initialize {lc_provider} model '{config.model_name}': {exc}"
+                )
+                raise ValueError(
+                    f"Failed to initialize {provider_id} model '{config.model_name}': {exc}"
+                ) from exc
+
+            # Fall back to OpenAI-compatible interface only for OpenAI / generic endpoints
             from langchain_openai import ChatOpenAI
 
             logger.warning(
@@ -133,6 +145,71 @@ class LangChainModelProvider(ModelProvider):
             return settings.gemini_api_key.get_secret_value() if settings.gemini_api_key else None
         return None
 
+    @staticmethod
+    def _extract_text_content(content: Any) -> str:
+        """Extracts pure textual content from string, list of content blocks, or dictionaries.
+
+        Args:
+            content (Any): The raw content payload from LangChain response or chunk.
+
+        Returns:
+            str: Normalized pure text string without raw block serialization artifacts.
+        """
+        if isinstance(content, str):
+            # [Sanitization] Clean legacy raw Python block list representations if present
+            if "[{'type':" in content or '[{"type":' in content:
+                import ast
+                import re
+
+                matches = list(re.finditer(r"\[(?:\s*\{.*?\}\s*)*\]", content, re.DOTALL))
+                if matches:
+                    result: list[str] = []
+                    last_end = 0
+                    for m in matches:
+                        result.append(content[last_end : m.start()])
+                        block_str = m.group(0)
+                        try:
+                            parsed = ast.literal_eval(block_str)
+                            if isinstance(parsed, list):
+                                for item in parsed:
+                                    if (
+                                        isinstance(item, dict)
+                                        and "text" in item
+                                        and isinstance(item["text"], str)
+                                    ):
+                                        result.append(item["text"])
+                                    elif isinstance(item, str):
+                                        result.append(item)
+                            else:
+                                result.append(block_str)
+                        except Exception:
+                            result.append(block_str)
+                        last_end = m.end()
+                    result.append(content[last_end:])
+                    return "".join(result)
+            return content
+
+        if isinstance(content, list):
+            texts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    texts.append(item)
+                elif isinstance(item, dict):
+                    # [Extraction] Extract text payload from multimodal / structured text blocks
+                    text_val = item.get("text")
+                    if text_val and isinstance(text_val, str):
+                        texts.append(text_val)
+                elif hasattr(item, "text") and isinstance(item.text, str):
+                    texts.append(item.text)
+            return "".join(texts)
+
+        if isinstance(content, dict):
+            text_val = content.get("text")
+            if text_val and isinstance(text_val, str):
+                return text_val
+
+        return ""
+
     def _format_messages(
         self, messages: list[ChatMessage], system_instruction: str | None = None
     ) -> list[BaseMessage]:
@@ -151,12 +228,13 @@ class LangChainModelProvider(ModelProvider):
             lc_messages.append(SystemMessage(content=system_text))
 
         for msg in messages:
+            clean_text = self._extract_text_content(msg.content)
             if msg.role == "user":
-                lc_messages.append(HumanMessage(content=msg.content))
+                lc_messages.append(HumanMessage(content=clean_text))
             elif msg.role == "assistant":
-                lc_messages.append(AIMessage(content=msg.content))
+                lc_messages.append(AIMessage(content=clean_text))
             elif msg.role == "system":
-                lc_messages.append(SystemMessage(content=msg.content))
+                lc_messages.append(SystemMessage(content=clean_text))
 
         return lc_messages
 
@@ -197,9 +275,10 @@ class LangChainModelProvider(ModelProvider):
                 completion_tokens=usage_meta.get("output_tokens", 0),
                 total_tokens=usage_meta.get("total_tokens", 0),
             )
+            raw_text = self._extract_text_content(response.content)
 
             return ModelResponse(
-                content=str(response.content),
+                content=raw_text,
                 model_name=self.config.model_name,
                 usage=usage,
                 finish_reason="stop",
@@ -245,7 +324,7 @@ class LangChainModelProvider(ModelProvider):
         try:
             lc_messages = self._format_messages(messages, system_instruction)
             async for chunk in self.chat_model.astream(lc_messages):
-                delta_text = str(chunk.content)
+                delta_text = self._extract_text_content(chunk.content)
                 if delta_text:
                     yield ModelResponseChunk(delta_content=delta_text)
         except Exception as exc:

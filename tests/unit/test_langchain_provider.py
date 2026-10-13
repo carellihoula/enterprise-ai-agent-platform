@@ -59,3 +59,32 @@ async def test_langchain_provider_mock_stream() -> None:
 
     full_text = "".join(chunks)
     assert "Simulated response" in full_text
+
+
+@pytest.mark.unit
+def test_extract_text_content_blocks() -> None:
+    """Tests that _extract_text_content extracts pure text from Google GenAI list chunks and raw blocks."""
+    # [Extraction] Test list of dictionary blocks from Google GenAI
+    list_chunk = [
+        {"type": "text", "text": "Hello!", "index": 0},
+        {"type": "text", "text": " How can I help you today?", "index": 0},
+        {"type": "text", "text": "", "extras": {"signature": "abc123xyz"}, "index": 0},
+    ]
+    extracted = LangChainModelProvider._extract_text_content(list_chunk)
+    assert extracted == "Hello! How can I help you today?"
+
+    # [Extraction] Test empty list payload
+    assert LangChainModelProvider._extract_text_content([]) == ""
+
+    # [Sanitization] Test stringified serialized blocks from stored history
+    serialized_str = (
+        "[{'type': 'text', 'text': 'Hello!', 'index': 0}]"
+        "[{'type': 'text', 'text': ' How can I help you today?', 'index': 0}]"
+        "[{'type': 'text', 'text': '', 'extras': {'signature': 'abc123xyz'}, 'index': 0}][]"
+    )
+    cleaned = LangChainModelProvider._extract_text_content(serialized_str)
+    assert cleaned == "Hello! How can I help you today?"
+
+    # [Preservation] Test standard string input is preserved intact
+    normal_str = "Standard plain text string"
+    assert LangChainModelProvider._extract_text_content(normal_str) == normal_str
