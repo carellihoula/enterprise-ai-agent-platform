@@ -64,8 +64,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       <div className="flex items-center gap-2.5 flex-wrap">
         {/* Provider Select Dropdown */}
         <div className="flex items-center gap-1.5">
-          <div className="p-1.5 bg-zinc-100 border border-zinc-200 rounded-xl text-zinc-700 shadow-sm">
-            <Server className="w-4 h-4 text-indigo-600" />
+          <div className="p-1.5 bg-zinc-100 border border-zinc-200 rounded-md text-zinc-700 shadow-xs">
+            <Server className="w-4 h-4 text-zinc-700" />
           </div>
           <Select
             value={config.providerId}
@@ -87,8 +87,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
         {/* Model Selection: Dropdown OR Freeform Custom Input */}
         <div className="flex items-center gap-1.5">
-          <div className="p-1.5 bg-zinc-100 border border-zinc-200 rounded-xl text-zinc-700 shadow-sm">
-            <Cpu className="w-4 h-4 text-emerald-600" />
+          <div className="p-1.5 bg-zinc-100 border border-zinc-200 rounded-md text-zinc-700 shadow-xs">
+            <Cpu className="w-4 h-4 text-zinc-700" />
           </div>
 
           {isCustomInputMode ? (
@@ -98,7 +98,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               value={config.modelName}
               onChange={(e) => onChangeConfig({ ...config, modelName: e.target.value })}
               disabled={disabled}
-              className="w-64 px-3 py-1.5 text-xs font-mono bg-white border border-emerald-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
+              className="w-64 px-3 py-1.5 text-xs font-mono bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-950 shadow-xs"
             />
           ) : (
             <Select
@@ -126,8 +126,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             onClick={() => setIsCustomInputMode(!isCustomInputMode)}
             disabled={disabled}
             title={isCustomInputMode ? 'Switch to preset dropdown' : 'Enter custom Model ID string'}
-            className={`h-8 w-8 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 ${
-              isCustomInputMode ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : ''
+            className={`h-8 w-8 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-md ${
+              isCustomInputMode ? 'bg-zinc-100 text-zinc-900 border border-zinc-300' : ''
             }`}
           >
             <Edit3 className="w-3.5 h-3.5" />
@@ -140,12 +140,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           size="sm"
           onClick={() => setShowParameters(!showParameters)}
           disabled={disabled}
-          className={`flex items-center gap-1.5 border-zinc-200 text-zinc-700 ${
-            showParameters ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'hover:bg-zinc-100'
+          className={`flex items-center gap-1.5 border-zinc-200 text-zinc-700 rounded-md ${
+            showParameters ? 'bg-zinc-100 text-zinc-900 border-zinc-300' : 'hover:bg-zinc-100'
           }`}
           title="Configure Model Hyperparameters (Temperature, Max Tokens, System Prompt)"
         >
-          <Sliders className="w-4 h-4 text-indigo-600" />
+          <Sliders className="w-4 h-4 text-zinc-700" />
           <span className="hidden sm:inline">Parameters</span>
         </Button>
 
@@ -156,10 +156,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             size="sm"
             onClick={onOpenSettings}
             disabled={disabled}
-            className="flex items-center gap-1.5 border-zinc-200 hover:bg-zinc-100 text-zinc-700"
+            className="flex items-center gap-1.5 border-zinc-200 hover:bg-zinc-100 text-zinc-700 rounded-md"
             title="Configure API Keys & Custom Base URLs"
           >
-            <Key className="w-4 h-4 text-amber-600" />
+            <Key className="w-4 h-4 text-zinc-700" />
             <span className="hidden sm:inline">API Keys / Base URL</span>
           </Button>
         )}
@@ -167,12 +167,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
       {/* Expandable Parameters Drawer */}
       {showParameters && (
-        <div className="p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl space-y-3.5 text-xs">
+        <div className="p-3.5 bg-zinc-50 border border-zinc-200 rounded-lg space-y-3.5 text-xs">
           {/* Temperature Slider */}
           <div className="space-y-1.5">
             <div className="flex justify-between items-center">
               <Label htmlFor="temperature-slider" className="font-semibold text-zinc-700">
-                Temperature: <span className="text-indigo-600 font-mono font-bold">{config.temperature}</span>
+                Temperature: <span className="text-zinc-900 font-mono font-bold">{config.temperature}</span>
               </Label>
               <span className="text-[10px] text-zinc-400">0.0 (Deterministic) - 2.0 (Creative)</span>
             </div>
@@ -206,7 +206,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   })
                 }
                 disabled={disabled}
-                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
+                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-950 shadow-xs"
               />
             </div>
 
@@ -221,7 +221,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 value={config.systemPrompt ?? ''}
                 onChange={(e) => onChangeConfig({ ...config, systemPrompt: e.target.value })}
                 disabled={disabled}
-                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
+                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-950 shadow-xs"
               />
             </div>
           </div>

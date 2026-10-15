@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { ModelConfigState } from "@/types/chat";
 import { SUPPORTED_PROVIDERS } from "@/components/assistant-config/types";
+import { toast } from "@/components/ui/toast";
 
 interface UseAssistantsProps {
   onSyncModelConfig?: (config: Partial<ModelConfigState>) => void;
@@ -96,6 +97,10 @@ export function useAssistants({ onSyncModelConfig }: UseAssistantsProps = {}) {
       }
     } catch (err) {
       console.error("Failed to load assistants catalog", err);
+      toast.error(
+        "Could not load assistants catalog. Please check your connection.",
+        "Catalog Error",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -106,25 +111,47 @@ export function useAssistants({ onSyncModelConfig }: UseAssistantsProps = {}) {
   }, [loadAssistants]);
 
   const createAssistant = async (payload: AssistantCreatePayload) => {
-    const created = await createAssistantApi(payload);
-    setAssistants((prev) => [created, ...prev]);
-    selectAssistant(created);
-    setAssistantToEdit(null);
+    try {
+      const created = await createAssistantApi(payload);
+      setAssistants((prev) => [created, ...prev]);
+      selectAssistant(created);
+      setAssistantToEdit(null);
+      toast.success(
+        `Assistant "${created.name}" created successfully.`,
+        "Assistant Created",
+      );
+    } catch (err: any) {
+      toast.error(
+        err.message || "Failed to create new assistant.",
+        "Creation Failed",
+      );
+    }
   };
 
   const updateAssistant = async (
     id: string,
     payload: AssistantUpdatePayload,
   ) => {
-    const updated = await updateAssistantApi(id, payload);
-    setAssistants((prev) =>
-      prev.map((a) => (a.id === updated.id ? updated : a)),
-    );
-    if (activeAssistant?.id === updated.id) {
-      setActiveAssistant(updated);
-      syncAssistantToModelConfig(updated);
+    try {
+      const updated = await updateAssistantApi(id, payload);
+      setAssistants((prev) =>
+        prev.map((a) => (a.id === updated.id ? updated : a)),
+      );
+      if (activeAssistant?.id === updated.id) {
+        setActiveAssistant(updated);
+        syncAssistantToModelConfig(updated);
+      }
+      setAssistantToEdit(null);
+      toast.success(
+        `Assistant "${updated.name}" updated successfully.`,
+        "Configuration Saved",
+      );
+    } catch (err: any) {
+      toast.error(
+        err.message || "Failed to update assistant.",
+        "Update Failed",
+      );
     }
-    setAssistantToEdit(null);
   };
 
   const deleteAssistant = async (assistant: Assistant) => {
@@ -135,12 +162,23 @@ export function useAssistants({ onSyncModelConfig }: UseAssistantsProps = {}) {
     ) {
       return;
     }
-    await deleteAssistantApi(assistant.id);
-    const updated = assistants.filter((a) => a.id !== assistant.id);
-    setAssistants(updated);
-    if (activeAssistant?.id === assistant.id && updated.length > 0) {
-      const fallback = updated.find((a) => a.is_default) || updated[0];
-      selectAssistant(fallback);
+    try {
+      await deleteAssistantApi(assistant.id);
+      const updated = assistants.filter((a) => a.id !== assistant.id);
+      setAssistants(updated);
+      if (activeAssistant?.id === assistant.id && updated.length > 0) {
+        const fallback = updated.find((a) => a.is_default) || updated[0];
+        selectAssistant(fallback);
+      }
+      toast.info(
+        `Assistant "${assistant.name}" has been removed.`,
+        "Assistant Deleted",
+      );
+    } catch (err: any) {
+      toast.error(
+        err.message || "Failed to delete assistant.",
+        "Delete Failed",
+      );
     }
   };
 

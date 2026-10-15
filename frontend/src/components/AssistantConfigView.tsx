@@ -78,7 +78,7 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
 
   return (
     <div className="flex-1 overflow-y-auto bg-white p-4 sm:p-6 md:p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
         <ConfigHeader
           isEditing={!!assistantToEdit}
           assistantName={assistantToEdit?.name}
@@ -146,12 +146,12 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
         />
 
         {/* Bottom Actions Footer */}
-        <div className="flex items-center justify-end gap-3 pt-3 pb-8">
+        <div className="flex items-center justify-end gap-2.5 pt-4 pb-12">
           <Button
             variant="outline"
             size="sm"
             onClick={onNavigateToPlayground}
-            className="text-xs rounded-xl border-zinc-200 text-zinc-600 hover:bg-zinc-50 shadow-2xs"
+            className="text-xs rounded-md border-zinc-200 text-zinc-700 hover:bg-zinc-50 shadow-none px-4 py-1.5"
           >
             Annuler
           </Button>
@@ -160,14 +160,14 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
             size="sm"
             disabled={isSubmitting}
             onClick={handleSubmitAssistant}
-            className="bg-[#3ECF8E] hover:bg-[#34b27b] text-zinc-950 text-xs rounded-xl font-semibold px-5 gap-2 shadow-xs transition-all"
+            className="bg-zinc-900 hover:bg-zinc-800 text-white text-xs rounded-md font-medium px-4 py-1.5 gap-1.5 shadow-none transition-colors"
           >
             {isSubmitting ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-950" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
             ) : assistantToEdit ? (
-              <Check className="w-3.5 h-3.5 text-zinc-950" />
+              <Check className="w-3.5 h-3.5 text-white" />
             ) : (
-              <Plus className="w-3.5 h-3.5 text-zinc-950" />
+              <Plus className="w-3.5 h-3.5 text-white" />
             )}
             <span>
               {isSubmitting

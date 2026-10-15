@@ -17,26 +17,20 @@ export const TemperatureSlider: React.FC<TemperatureSliderProps> = ({
   onTemperatureChange,
 }) => {
   return (
-    <div className="p-5 bg-white border border-zinc-200/90 rounded-xl space-y-4 shadow-2xs">
+    <div className="space-y-4 pb-6 border-b border-zinc-200">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-1 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-200/60">
-            <Gauge className="w-3.5 h-3.5" />
-          </div>
           <Label className="text-xs font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
             <span>4. Sampling Temperature</span>
-            <Badge
-              variant="secondary"
-              className="font-mono text-[11px] bg-emerald-50 text-emerald-700 border-emerald-200/80 px-2 py-0.5"
-            >
+            <span className="font-mono text-[11px] bg-zinc-100 text-zinc-800 border border-zinc-200 px-2 py-0.5 rounded-md font-medium">
               {temperature.toFixed(2)}
-            </Badge>
+            </span>
           </Label>
         </div>
         <span className="text-[11px] font-mono text-zinc-400">Range: [0.0 - 1.0]</span>
       </div>
 
-      <div className="space-y-2.5 pt-1">
+      <div className="space-y-2 pt-1">
         <Slider
           min={0.0}
           max={1.0}

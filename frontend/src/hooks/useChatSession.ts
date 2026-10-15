@@ -7,6 +7,7 @@ import {
   deleteSession,
   streamChatCompletion,
 } from "@/lib/api";
+import { toast } from "@/components/ui/toast";
 
 interface UseChatSessionOptions {
   modelConfig: ModelConfigState;
@@ -49,7 +50,10 @@ export function useChatSession({
         handleSelectSession(data[0].id);
       }
     } catch (err: any) {
-      setErrorMessage(err.message || "Failed to connect to backend server");
+      toast.error(
+        "Could not connect to the backend server. Please verify the service is running.",
+        "Connection Error",
+      );
     } finally {
       setIsLoadingSessions(false);
     }
@@ -68,7 +72,10 @@ export function useChatSession({
         onAssistantMatched(detail.assistant_id);
       }
     } catch (err: any) {
-      setErrorMessage(err.message || "Failed to load conversation messages");
+      toast.error(
+        "Failed to load conversation messages.",
+        "Session Error",
+      );
     } finally {
       setIsLoadingMessages(false);
     }
@@ -84,7 +91,10 @@ export function useChatSession({
       setMessages([]);
       onSessionSelected?.();
     } catch (err: any) {
-      setErrorMessage(err.message || "Failed to create new conversation");
+      toast.error(
+        "Could not start a new conversation session.",
+        "Creation Error",
+      );
     }
   };
 
@@ -100,8 +110,12 @@ export function useChatSession({
         setCurrentSessionId(null);
         setMessages([]);
       }
+      toast.info("Conversation deleted successfully.", "Session Removed");
     } catch (err: any) {
-      setErrorMessage(err.message || "Failed to delete session");
+      toast.error(
+        "Failed to delete conversation session.",
+        "Delete Error",
+      );
     }
   };
 
@@ -123,7 +137,7 @@ export function useChatSession({
         activeSessionId = newSession.id;
         setCurrentSessionId(newSession.id);
       } catch (err: any) {
-        setErrorMessage("Failed to initialize session");
+        toast.error("Failed to initialize conversation session.", "Session Error");
         return;
       }
     }
@@ -184,9 +198,16 @@ export function useChatSession({
         setIsStreaming(false);
         abortControllerRef.current = null;
         if (err.name !== "AbortError" && !err.message.includes("aborted")) {
-          setErrorMessage(
-            err.message || "Error occurred during streaming generation",
-          );
+          toast.add({
+            variant: "destructive",
+            title: "Generation Error",
+            description:
+              err.message || "Failed to generate AI response from backend.",
+            actionProps: {
+              children: "Retry",
+              onClick: () => handleRetryLastMessage(),
+            },
+          });
         }
       },
     });

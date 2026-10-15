@@ -43,12 +43,12 @@ export const PromptSuggestionsGrid: React.FC<PromptSuggestionsGridProps> = ({
   onSelectPrompt,
 }) => {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[80%] text-center max-w-4xl mx-auto space-y-8 p-6">
+    <div className="flex flex-col items-center justify-center min-h-[75%] text-center max-w-3xl mx-auto space-y-8 p-6">
       <div className="space-y-3">
-        <div className="inline-flex p-3 bg-indigo-50 border border-indigo-100 rounded-2xl text-indigo-600 shadow-sm">
-          <Bot className="w-7 h-7" />
+        <div className="inline-flex p-2.5 bg-zinc-100 border border-zinc-200 rounded-xl text-zinc-900 shadow-none">
+          <Bot className="w-6 h-6 text-zinc-900" />
         </div>
-        <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">
+        <h2 className="text-xl font-semibold text-zinc-900 tracking-tight">
           What can I help with today?
         </h2>
         <p className="text-xs text-zinc-500 leading-relaxed max-w-md mx-auto">
@@ -57,7 +57,7 @@ export const PromptSuggestionsGrid: React.FC<PromptSuggestionsGridProps> = ({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full text-left">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full text-left">
         {PROMPT_SUGGESTIONS.map((item, idx) => {
           const Icon = item.icon;
           return (
@@ -65,13 +65,13 @@ export const PromptSuggestionsGrid: React.FC<PromptSuggestionsGridProps> = ({
               key={idx}
               type="button"
               onClick={() => onSelectPrompt(item.prompt)}
-              className="p-3.5 rounded-2xl border border-zinc-200/80 bg-zinc-50/50 hover:bg-zinc-100/80 hover:border-zinc-300 transition-all group flex flex-col justify-between"
+              className="p-3 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 hover:border-zinc-300 transition-colors group flex flex-col justify-between"
             >
               <div className="flex items-center justify-between w-full mb-1">
-                <span className="text-xs font-semibold text-zinc-900 group-hover:text-indigo-600 transition-colors">
+                <span className="text-xs font-medium text-zinc-900 group-hover:text-zinc-950 transition-colors">
                   {item.title}
                 </span>
-                <Icon className="w-3.5 h-3.5 text-zinc-400 group-hover:text-indigo-600 transition-colors" />
+                <Icon className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-700 transition-colors" />
               </div>
               <span className="text-[11px] text-zinc-500 line-clamp-2">
                 {item.subtitle}

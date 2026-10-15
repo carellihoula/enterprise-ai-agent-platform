@@ -92,7 +92,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
       <Button
         size="sm"
         onClick={handleSaveAll}
-        className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
+        className="bg-zinc-900 hover:bg-zinc-800 text-white font-medium rounded-md"
       >
         Save Settings
       </Button>
@@ -105,15 +105,15 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
       onClose={onClose}
       title="Platform Settings & Model Configuration"
       description="Configure model providers, hyperparameters, and local API keys in a single unified place."
-      icon={<Settings className="w-5 h-5 text-indigo-600" />}
+      icon={<Settings className="w-5 h-5 text-zinc-900" />}
       footer={modalFooter}
       maxWidthClassName="max-w-xl"
     >
       <div className="space-y-4 text-xs max-h-[70vh] overflow-y-auto pr-1">
         {/* Section 1: Provider & Model Selection */}
-        <div className="space-y-3 p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl">
+        <div className="space-y-3 p-3.5 bg-zinc-50 border border-zinc-200 rounded-lg">
           <div className="flex items-center gap-1.5 font-semibold text-zinc-900 text-xs pb-1 border-b border-zinc-200">
-            <Server className="w-4 h-4 text-indigo-600" />
+            <Server className="w-4 h-4 text-zinc-700" />
             <span>Active Model & Provider</span>
           </div>
 
@@ -161,7 +161,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                   onChange={(e) =>
                     setLocalConfig((prev) => ({ ...prev, modelName: e.target.value }))
                   }
-                  className="w-full px-3 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full px-3 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-950"
                 />
               ) : (
                 <Select
@@ -187,9 +187,9 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
         </div>
 
         {/* Section 2: Hyperparameters */}
-        <div className="space-y-3.5 p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl">
+        <div className="space-y-3.5 p-3.5 bg-zinc-50 border border-zinc-200 rounded-lg">
           <div className="flex items-center gap-1.5 font-semibold text-zinc-900 text-xs pb-1 border-b border-zinc-200">
-            <Sliders className="w-4 h-4 text-purple-600" />
+            <Sliders className="w-4 h-4 text-zinc-700" />
             <span>Generation Hyperparameters</span>
           </div>
 
@@ -197,7 +197,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
           <div className="space-y-1.5">
             <div className="flex justify-between items-center">
               <Label htmlFor="modal-temperature" className="font-semibold text-zinc-700">
-                Temperature: <span className="text-indigo-600 font-mono font-bold">{localConfig.temperature}</span>
+                Temperature: <span className="text-zinc-900 font-mono font-bold">{localConfig.temperature}</span>
               </Label>
               <span className="text-[10px] text-zinc-400">0.0 (Deterministic) - 2.0 (Creative)</span>
             </div>
@@ -231,7 +231,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                     maxTokens: e.target.value ? parseInt(e.target.value, 10) : undefined,
                   }))
                 }
-                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
+                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-950 shadow-xs"
               />
             </div>
 
@@ -247,16 +247,16 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 onChange={(e) =>
                   setLocalConfig((prev) => ({ ...prev, systemPrompt: e.target.value }))
                 }
-                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
+                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-950 shadow-xs"
               />
             </div>
           </div>
         </div>
 
         {/* Section 3: API Keys & Endpoints */}
-        <div className="space-y-3 p-3.5 bg-zinc-50 border border-zinc-200 rounded-xl">
+        <div className="space-y-3 p-3.5 bg-zinc-50 border border-zinc-200 rounded-lg">
           <div className="flex items-center gap-1.5 font-semibold text-zinc-900 text-xs pb-1 border-b border-zinc-200">
-            <Key className="w-4 h-4 text-amber-600" />
+            <Key className="w-4 h-4 text-zinc-700" />
             <span>API Keys & Endpoints (Stored Locally)</span>
           </div>
 
@@ -268,7 +268,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 placeholder="AIzaSy..."
                 value={geminiKey}
                 onChange={(e) => setGeminiKey(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-md focus:outline-none focus:ring-1 focus:ring-zinc-950"
               />
               <p className="text-[10px] text-zinc-400">
                 Your key is stored securely in your browser localStorage and sent directly to Google Gemini.

@@ -73,8 +73,8 @@ const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
           ),
           li: ({ children }) => <li className="leading-relaxed">{children}</li>,
           blockquote: ({ children }) => (
-            // [UI/Visual] Callout/blockquote container with indigo accent bar and matching text-sm font size
-            <blockquote className="my-3 pl-3.5 border-l-2 border-indigo-500 bg-indigo-50/30 py-2 text-zinc-700 rounded-r-lg italic text-sm">
+            // [UI/Visual] Callout/blockquote container with neutral bar and matching text-sm font size
+            <blockquote className="my-3 pl-3.5 border-l-2 border-zinc-900 bg-zinc-50 py-2 text-zinc-700 rounded-r-sm italic text-sm">
               {children}
             </blockquote>
           ),
@@ -101,7 +101,7 @@ const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-indigo-600 hover:text-indigo-700 underline underline-offset-2 font-medium"
+              className="text-zinc-900 hover:text-zinc-600 underline underline-offset-2 font-medium"
             >
               {children}
             </a>

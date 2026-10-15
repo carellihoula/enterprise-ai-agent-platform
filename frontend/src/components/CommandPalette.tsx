@@ -42,7 +42,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 }) => {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xl p-0 overflow-hidden bg-white border-zinc-200 shadow-2xl rounded-2xl">
+      <DialogContent className="max-w-xl p-0 overflow-hidden bg-white border border-zinc-200 shadow-xl rounded-xl">
         <Command className="flex flex-col w-full text-zinc-900">
           <div className="flex items-center px-4 border-b border-zinc-200 gap-2.5">
             <Search className="w-4 h-4 text-zinc-400 shrink-0" />
@@ -64,9 +64,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   onClose();
                   onOpenAgentBuilder();
                 }}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer hover:bg-zinc-100 aria-selected:bg-indigo-50 aria-selected:text-indigo-900 transition-colors"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 aria-selected:text-zinc-900 transition-colors"
               >
-                <div className="p-1 bg-indigo-50 rounded-lg text-indigo-600">
+                <div className="p-1 bg-zinc-900 rounded-md text-white">
                   <Plus className="w-3.5 h-3.5" />
                 </div>
                 <span className="font-medium text-zinc-800">Create new AI Agent</span>
@@ -77,9 +77,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   onClose();
                   onOpenSettings();
                 }}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer hover:bg-zinc-100 aria-selected:bg-indigo-50 aria-selected:text-indigo-900 transition-colors"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 aria-selected:text-zinc-900 transition-colors"
               >
-                <div className="p-1 bg-amber-50 rounded-lg text-amber-600">
+                <div className="p-1 bg-zinc-100 border border-zinc-200 rounded-md text-zinc-700">
                   <Settings className="w-3.5 h-3.5" />
                 </div>
                 <span className="font-medium text-zinc-800">Configure Model Providers & Credentials</span>
@@ -93,7 +93,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   onClose();
                   onNavigate('home');
                 }}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 transition-colors"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 aria-selected:text-zinc-900 transition-colors"
               >
                 <Home className="w-3.5 h-3.5 text-zinc-500" />
                 <span>Dashboard (Home)</span>
@@ -104,9 +104,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   onClose();
                   onNavigate('agents');
                 }}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 transition-colors"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 aria-selected:text-zinc-900 transition-colors"
               >
-                <Bot className="w-3.5 h-3.5 text-indigo-600" />
+                <Bot className="w-3.5 h-3.5 text-zinc-700" />
                 <span>AI Agents</span>
               </Command.Item>
 
@@ -115,9 +115,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   onClose();
                   onNavigate('workflows');
                 }}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 transition-colors"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 aria-selected:text-zinc-900 transition-colors"
               >
-                <Workflow className="w-3.5 h-3.5 text-purple-600" />
+                <Workflow className="w-3.5 h-3.5 text-zinc-700" />
                 <span>Workflows & Multi-Agent</span>
               </Command.Item>
 
@@ -126,9 +126,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   onClose();
                   onNavigate('knowledge');
                 }}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 transition-colors"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 aria-selected:text-zinc-900 transition-colors"
               >
-                <Database className="w-3.5 h-3.5 text-emerald-600" />
+                <Database className="w-3.5 h-3.5 text-zinc-700" />
                 <span>Knowledge Bases & RAG</span>
               </Command.Item>
 
@@ -137,9 +137,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   onClose();
                   onNavigate('tools');
                 }}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 transition-colors"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 aria-selected:text-zinc-900 transition-colors"
               >
-                <Wrench className="w-3.5 h-3.5 text-blue-600" />
+                <Wrench className="w-3.5 h-3.5 text-zinc-700" />
                 <span>Tools & APIs</span>
               </Command.Item>
 
@@ -148,9 +148,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   onClose();
                   onNavigate('mcp');
                 }}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 transition-colors"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 aria-selected:text-zinc-900 transition-colors"
               >
-                <Network className="w-3.5 h-3.5 text-rose-600" />
+                <Network className="w-3.5 h-3.5 text-zinc-700" />
                 <span>MCP Servers</span>
               </Command.Item>
 
@@ -159,9 +159,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   onClose();
                   onNavigate('models');
                 }}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 transition-colors"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer hover:bg-zinc-100 aria-selected:bg-zinc-100 aria-selected:text-zinc-900 transition-colors"
               >
-                <Cpu className="w-3.5 h-3.5 text-teal-600" />
+                <Cpu className="w-3.5 h-3.5 text-zinc-700" />
                 <span>Models & Providers</span>
               </Command.Item>
             </Command.Group>

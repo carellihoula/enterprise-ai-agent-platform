@@ -34,19 +34,14 @@ export const ModelListManager: React.FC<ModelListManagerProps> = ({
   onResetProviderModels,
 }) => {
   return (
-    <div className="p-5 bg-white border border-zinc-200/90 rounded-xl space-y-4 shadow-2xs">
-      <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
+    <div className="space-y-4 pb-6 border-b border-zinc-200">
+      <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <div className="p-1 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-200/60">
-              <Cpu className="w-3.5 h-3.5" />
-            </div>
-            <Label className="text-xs font-semibold text-zinc-900 tracking-tight">
-              3. Models for {currentProviderDef.name} ({currentModelList.length})
-            </Label>
-          </div>
-          <p className="text-[11px] text-zinc-400 mt-1">
-            Build your active model catalog. Click any model to activate it.
+          <Label className="text-xs font-semibold text-zinc-900 tracking-tight">
+            3. Models for {currentProviderDef.name} ({currentModelList.length})
+          </Label>
+          <p className="text-[11px] text-zinc-500 mt-0.5">
+            Configure your active model catalog. Click any model to activate it.
           </p>
         </div>
 
@@ -55,7 +50,7 @@ export const ModelListManager: React.FC<ModelListManagerProps> = ({
           size="sm"
           onClick={onResetProviderModels}
           title="Clear model list"
-          className="text-[11px] font-mono text-zinc-400 hover:text-zinc-900 h-7 px-2.5 gap-1.5 rounded-lg"
+          className="text-[11px] font-mono text-zinc-400 hover:text-zinc-900 h-6 px-2 gap-1 rounded"
         >
           <RotateCcw className="w-3 h-3 text-zinc-400" />
           <span>Clear List</span>
@@ -69,14 +64,14 @@ export const ModelListManager: React.FC<ModelListManagerProps> = ({
           placeholder="Type a model ID (e.g. gpt-4o, gemini-2.5-flash, claude-3-5-sonnet)..."
           value={newModelInput}
           onChange={(e) => setNewModelInput(e.target.value)}
-          className="flex-1 px-3.5 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-2xs"
+          className="flex-1 px-3 py-1.5 text-xs font-mono bg-white border border-zinc-300 rounded-md focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-colors"
         />
         <Button
           type="submit"
           size="sm"
-          className="bg-[#3ECF8E] hover:bg-[#34b27b] text-zinc-950 font-semibold text-xs rounded-lg gap-1.5 shrink-0 px-3.5 shadow-xs transition-all"
+          className="bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-md gap-1.5 shrink-0 px-3 py-1.5 shadow-none transition-colors"
         >
-          <Plus className="w-3.5 h-3.5 text-zinc-950" />
+          <Plus className="w-3.5 h-3.5" />
           <span>Add Model</span>
         </Button>
       </form>
@@ -84,7 +79,7 @@ export const ModelListManager: React.FC<ModelListManagerProps> = ({
       {/* List of Models as Interactive Badges */}
       <div className="flex items-center gap-2 flex-wrap pt-1">
         {currentModelList.length === 0 ? (
-          <div className="w-full py-4 px-3 text-center rounded-lg border border-dashed border-zinc-200 bg-zinc-50/50 text-xs text-zinc-400 font-mono">
+          <div className="w-full py-4 px-3 text-center rounded-md border border-dashed border-zinc-300 bg-zinc-50/50 text-xs text-zinc-500 font-mono">
             No models configured for this provider yet. Type a model ID above and click &quot;Add Model&quot;.
           </div>
         ) : (
@@ -95,21 +90,18 @@ export const ModelListManager: React.FC<ModelListManagerProps> = ({
                 key={modelName}
                 onClick={() => onSetActiveModel(modelName)}
                 className={cn(
-                  "group flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono cursor-pointer transition-all",
+                  "group flex items-center gap-2 px-2.5 py-1 rounded-md border text-xs font-mono cursor-pointer transition-colors",
                   isActive
-                    ? "bg-zinc-900 text-emerald-400 border-zinc-900 shadow-xs ring-1 ring-emerald-500/40"
-                    : "bg-white text-zinc-700 border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50/60",
+                    ? "border-zinc-900 ring-1 ring-zinc-900 bg-white text-zinc-900 font-medium"
+                    : "bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50",
                 )}
               >
-                <span className="font-semibold">{modelName}</span>
+                <span className="font-medium">{modelName}</span>
 
                 {isActive && (
-                  <Badge
-                    variant="secondary"
-                    className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] px-1.5 py-0 h-4 font-mono font-normal"
-                  >
+                  <span className="text-[10px] font-mono font-medium px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-800 border border-zinc-200">
                     Active
-                  </Badge>
+                  </span>
                 )}
 
                 <button
@@ -122,8 +114,8 @@ export const ModelListManager: React.FC<ModelListManagerProps> = ({
                   className={cn(
                     "p-0.5 rounded transition-colors",
                     isActive
-                      ? "hover:bg-zinc-800 text-zinc-400 hover:text-rose-400"
-                      : "hover:bg-zinc-100 text-zinc-300 hover:text-rose-600",
+                      ? "hover:bg-zinc-300 text-zinc-500 hover:text-zinc-900"
+                      : "hover:bg-zinc-100 text-zinc-400 hover:text-rose-600",
                   )}
                 >
                   <Trash2 className="w-3 h-3" />
@@ -136,9 +128,9 @@ export const ModelListManager: React.FC<ModelListManagerProps> = ({
 
       {/* Active Model Indicator */}
       {currentModelList.length > 0 && activeModel && (
-        <div className="pt-3 flex items-center justify-between text-xs text-zinc-500 border-t border-zinc-100">
+        <div className="pt-2 flex items-center justify-between text-xs text-zinc-500">
           <span className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(62,207,142,0.6)]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-900" />
             <span>Active Model:</span>
             <strong className="text-zinc-900 font-mono font-medium">
               {activeModel}

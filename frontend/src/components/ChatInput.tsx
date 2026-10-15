@@ -67,10 +67,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     // [Layout] Align input bar width with max-w-5xl message container for visual consistency
-    <div className="w-full max-w-5xl mx-auto px-4 pb-5 pt-2 bg-gradient-to-t from-white via-white/95 to-transparent shrink-0">
+    <div className="w-full max-w-5xl mx-auto px-4 pb-4 pt-2 bg-gradient-to-t from-white via-white/95 to-transparent shrink-0">
       <div
         className={cn(
-          'relative flex flex-col bg-zinc-50/90 border border-zinc-200/90 rounded-3xl shadow-sm transition-all focus-within:border-zinc-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-zinc-100 p-2',
+          'relative flex flex-col bg-white border border-zinc-300 rounded-2xl shadow-xs transition-colors focus-within:border-zinc-500 focus-within:ring-1 focus-within:ring-zinc-400 p-2',
           disabled && 'opacity-60 pointer-events-none'
         )}
       >
@@ -83,17 +83,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           placeholder={placeholder}
           rows={1}
           disabled={isLoading || disabled}
-          className="w-full bg-transparent text-zinc-900 placeholder:text-zinc-400 text-sm px-3.5 pt-2 pb-1 resize-none focus:outline-none min-h-[46px] max-h-[220px] leading-relaxed font-sans"
+          className="w-full bg-transparent text-zinc-900 placeholder:text-zinc-400 text-sm px-3 pt-1.5 pb-1 resize-none focus:outline-none min-h-[44px] max-h-[220px] leading-relaxed font-sans"
         />
 
         {/* Bottom Actions Row */}
         <div className="flex items-center justify-between px-2 pt-1">
           {/* Left Action Attachments & Modifiers */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               title="Attach documents or knowledge data"
-              className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 rounded-xl transition-colors"
+              className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-md transition-colors"
             >
               <Paperclip className="w-4 h-4" />
             </button>
@@ -102,10 +102,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               type="button"
               onClick={onOpenAssistantPicker}
               title="Select AI Assistant"
-              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200/80 border border-zinc-200/80 rounded-xl transition-all shadow-2xs group"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:text-zinc-900 bg-white hover:bg-zinc-100 border border-zinc-200 rounded-md transition-colors group"
             >
-              <Globe className="w-3.5 h-3.5 text-zinc-400 group-hover:text-indigo-600 transition-colors" />
-              <span className="hidden sm:inline font-medium">
+              <Globe className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-800 transition-colors" />
+              <span className="hidden sm:inline">
                 {activeAssistantName ? `Assistant: ${activeAssistantName}` : "Enterprise Search"}
               </span>
             </button>
@@ -119,9 +119,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 size="icon"
                 onClick={onStopStreaming}
                 title="Stop response generation"
-                className="rounded-full h-8 w-8 bg-zinc-900 text-white hover:bg-zinc-800 transition-all shadow-sm"
+                className="rounded-full h-7 w-7 bg-zinc-900 text-white hover:bg-zinc-800 transition-colors shadow-none"
               >
-                <Square className="w-3.5 h-3.5 fill-white" />
+                <Square className="w-3 h-3 fill-white" />
               </Button>
             ) : (
               <Button
@@ -131,13 +131,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 disabled={!prompt.trim() || disabled}
                 title="Send message (Enter)"
                 className={cn(
-                  'rounded-full h-8 w-8 transition-all shadow-sm',
+                  'rounded-full h-7 w-7 transition-colors shadow-none',
                   prompt.trim()
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                    : 'bg-zinc-200 text-zinc-400 hover:bg-zinc-200 cursor-not-allowed'
+                    ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                    : 'bg-zinc-100 text-zinc-300 hover:bg-zinc-100 cursor-not-allowed'
                 )}
               >
-                <ArrowUp className="w-4 h-4 stroke-[2.5]" />
+                <ArrowUp className="w-3.5 h-3.5 stroke-[2.5]" />
               </Button>
             )}
           </div>

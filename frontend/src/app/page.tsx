@@ -11,10 +11,8 @@ import { Sidebar, NavTabId } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DashboardView } from "@/components/dashboard/DashboardView";
-import { ApiKeyModal } from "@/components/ApiKeyModal";
 import { AssistantConfigView } from "@/components/AssistantConfigView";
 import { Button } from "@/components/ui/button";
-import { Alert } from "@/components/ui/alert";
 import { PRESET_PROVIDERS, ModelConfigState } from "@/types/chat";
 import { Assistant } from "@/types/assistant";
 import { useChatSession } from "@/hooks/useChatSession";
@@ -30,7 +28,6 @@ export default function EnterpriseAppPage() {
   const [activeTab, setActiveTab] = useState<NavTabId>("home");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [isAssistantPickerOpen, setIsAssistantPickerOpen] = useState(false);
   const [chatViewMode, setChatViewMode] = useState<"playground" | "config">("playground");
 
@@ -96,8 +93,6 @@ export default function EnterpriseAppPage() {
     isLoadingSessions,
     isLoadingMessages,
     isStreaming,
-    errorMessage,
-    setErrorMessage,
     handleSelectSession,
     handleNewSession,
     handleDeleteSession,
@@ -148,6 +143,8 @@ export default function EnterpriseAppPage() {
           onDeleteSession={handleDeleteSession}
           isLoadingSessions={isLoadingSessions}
           onOpenSettings={handleOpenConfigForNew}
+          onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         />
       )}
 
@@ -160,22 +157,6 @@ export default function EnterpriseAppPage() {
           onOpenAgentBuilder={() => setActiveTab("agents")}
           modelConfig={modelConfig}
         />
-
-        {errorMessage && (
-          <div className="p-3 max-w-4xl mx-auto w-full">
-            <Alert variant="destructive" className="flex items-center justify-between">
-              <span className="font-medium text-xs">{errorMessage}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setErrorMessage(null)}
-                className="text-[10px] uppercase font-bold tracking-wider hover:bg-rose-100 text-rose-700 h-6"
-              >
-                Dismiss
-              </Button>
-            </Alert>
-          </div>
-        )}
 
         {/* 1. Dashboard View */}
         <div className={activeTab === "home" ? "flex-1 flex flex-col h-full overflow-hidden" : "hidden"}>
@@ -193,15 +174,6 @@ export default function EnterpriseAppPage() {
 
         {/* 2. Interactive Chat Playground / Assistant Config View */}
         <div className={activeTab === "chat" ? "flex-1 flex flex-col h-full overflow-hidden bg-white" : "hidden"}>
-          <EngineSubBar
-            modelConfig={modelConfig}
-            activeAssistant={activeAssistant}
-            chatViewMode={chatViewMode}
-            onToggleViewMode={() =>
-              setChatViewMode(chatViewMode === "config" ? "playground" : "config")
-            }
-          />
-
           {chatViewMode === "config" ? (
             <AssistantConfigView
               config={modelConfig}
@@ -212,16 +184,22 @@ export default function EnterpriseAppPage() {
               onUpdateAssistant={updateAssistant}
             />
           ) : (
-            <ChatPlaygroundView
-              messages={messages}
-              isLoadingMessages={isLoadingMessages}
-              isStreaming={isStreaming}
-              onSendMessage={handleSendMessage}
-              onStopStreaming={handleStopStreaming}
-              onRetryLastMessage={handleRetryLastMessage}
-              onOpenAssistantPicker={() => setIsAssistantPickerOpen(true)}
-              activeAssistantName={activeAssistant?.name}
-            />
+            <>
+              <EngineSubBar
+                modelConfig={modelConfig}
+                onToggleViewMode={() => setChatViewMode("config")}
+              />
+              <ChatPlaygroundView
+                messages={messages}
+                isLoadingMessages={isLoadingMessages}
+                isStreaming={isStreaming}
+                onSendMessage={handleSendMessage}
+                onStopStreaming={handleStopStreaming}
+                onRetryLastMessage={handleRetryLastMessage}
+                onOpenAssistantPicker={() => setIsAssistantPickerOpen(true)}
+                activeAssistantName={activeAssistant?.name}
+              />
+            </>
           )}
         </div>
 
@@ -255,13 +233,6 @@ export default function EnterpriseAppPage() {
         onNavigate={(tab) => setActiveTab(tab as NavTabId)}
         onOpenSettings={handleOpenConfigForNew}
         onOpenAgentBuilder={() => setActiveTab("agents")}
-      />
-
-      <ApiKeyModal
-        isOpen={isApiKeyModalOpen}
-        onClose={() => setIsApiKeyModalOpen(false)}
-        config={modelConfig}
-        onSaveConfig={setModelConfig}
       />
 
       <AssistantPickerModal

@@ -56,7 +56,7 @@ export const ChatPlaygroundView: React.FC<ChatPlaygroundViewProps> = ({
       >
         {isLoadingMessages ? (
           <div className="flex items-center justify-center h-full text-zinc-500 gap-2 text-sm">
-            <Sparkles className="w-4 h-4 animate-spin text-indigo-600" />
+            <Sparkles className="w-4 h-4 animate-spin text-zinc-900" />
             Loading chat history...
           </div>
         ) : messages.length === 0 ? (

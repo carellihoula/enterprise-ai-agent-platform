@@ -21,27 +21,19 @@ export const AssistantsListView: React.FC<AssistantsListViewProps> = ({
     <div className="flex-1 overflow-y-auto bg-white p-4 sm:p-6 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Top Header Bar */}
-        <div className="flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row pb-4 border-b border-zinc-100">
+        <div className="flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row pb-5 border-b border-zinc-200">
           <div>
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200/60">
-                <Bot className="w-4 h-4" />
-              </div>
-              <h1 className="text-lg font-bold text-zinc-900 tracking-tight">
-                AI Assistants Catalog
-              </h1>
-            </div>
-            <p className="text-xs text-zinc-500 mt-1">
-              Configure specialized personas, models, and system instructions for independent assistants.
-            </p>
+            <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
+              Assistants Catalog
+            </h1>
           </div>
 
           <Button
             size="sm"
             onClick={onCreateAssistant}
-            className="bg-[#3ECF8E] hover:bg-[#34b27b] text-zinc-950 text-xs rounded-xl font-semibold px-4 gap-1.5 shadow-xs shrink-0"
+            className="bg-zinc-900 hover:bg-zinc-800 text-white text-xs rounded-md font-medium px-3.5 py-1.5 gap-1.5 shadow-none shrink-0 transition-colors"
           >
-            <Plus className="w-3.5 h-3.5 text-zinc-950" />
+            <Plus className="w-3.5 h-3.5 text-white" />
             <span>Create Assistant</span>
           </Button>
         </div>
@@ -52,20 +44,20 @@ export const AssistantsListView: React.FC<AssistantsListViewProps> = ({
             Loading assistants catalog...
           </div>
         ) : assistants.length === 0 ? (
-          <div className="p-12 text-center border-2 border-dashed border-zinc-200 rounded-2xl space-y-3">
-            <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center mx-auto text-zinc-400">
-              <Bot className="w-5 h-5" />
+          <div className="p-12 text-center border border-dashed border-zinc-300 rounded-lg space-y-3">
+            <div className="w-9 h-9 rounded-md bg-zinc-100 flex items-center justify-center mx-auto text-zinc-500">
+              <Bot className="w-4 h-4" />
             </div>
-            <h3 className="text-sm font-semibold text-zinc-900">No Assistants Configured</h3>
+            <h3 className="text-xs font-semibold text-zinc-900">No Assistants Configured</h3>
             <p className="text-xs text-zinc-500 max-w-sm mx-auto">
               Create your first specialized assistant to start chatting with tailored personas and instructions.
             </p>
             <Button
               size="sm"
               onClick={onCreateAssistant}
-              className="bg-[#3ECF8E] hover:bg-[#34b27b] text-zinc-950 text-xs rounded-xl font-semibold px-4 gap-1.5"
+              className="bg-zinc-900 hover:bg-zinc-800 text-white text-xs rounded-md font-medium px-3.5 py-1.5 gap-1.5 shadow-none transition-colors"
             >
-              <Plus className="w-3.5 h-3.5 text-zinc-950" />
+              <Plus className="w-3.5 h-3.5 text-white" />
               <span>Create Assistant</span>
             </Button>
           </div>

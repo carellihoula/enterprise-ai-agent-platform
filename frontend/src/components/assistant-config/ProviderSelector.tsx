@@ -18,9 +18,9 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
   onSelectProvider,
 }) => {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 pb-6 border-b border-zinc-200">
       <div className="flex items-center justify-between">
-        <Label className="text-[11px] font-mono font-semibold text-zinc-800 uppercase tracking-wider">
+        <Label className="text-xs font-semibold text-zinc-900">
           1. Model Provider
         </Label>
         <span className="text-[11px] font-mono text-zinc-400">
@@ -28,7 +28,7 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
         </span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
         {SUPPORTED_PROVIDERS.map((prov) => {
           const isSelected = selectedProviderId === prov.id;
           return (
@@ -37,48 +37,51 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
               type="button"
               onClick={() => onSelectProvider(prov.id)}
               className={cn(
-                "flex flex-col text-left p-3.5 rounded-xl border transition-all relative group bg-white",
+                "flex flex-col text-left p-3 rounded-md border transition-colors relative group cursor-pointer bg-white",
                 isSelected
-                  ? "border-emerald-500 bg-emerald-500/[0.03] ring-1 ring-emerald-500/30 shadow-xs"
-                  : "border-zinc-200/90 hover:border-zinc-300 hover:shadow-xs",
+                  ? "border-zinc-900 ring-1 ring-zinc-900 text-zinc-900 font-medium"
+                  : "border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50/60 text-zinc-700",
               )}
             >
-              <div className="flex items-center justify-between w-full mb-2">
-                <div className="flex items-center gap-2.5">
+              <div className="flex items-center justify-between w-full mb-1.5">
+                <div className="flex items-center gap-2">
                   <div
                     className={cn(
-                      "p-1.5 rounded-lg border transition-colors",
+                      "p-1 rounded border transition-colors",
                       isSelected
-                        ? "bg-emerald-500 text-zinc-950 border-emerald-500 shadow-2xs"
-                        : "bg-white text-zinc-600 border-zinc-200 group-hover:border-zinc-300",
+                        ? "bg-white text-zinc-900 border-zinc-300 shadow-xs"
+                        : "bg-zinc-100 text-zinc-700 border-zinc-200 group-hover:border-zinc-300",
                     )}
                   >
                     {prov.id === "custom" ? (
-                      <Server className="w-4 h-4" />
+                      <Server className="w-3.5 h-3.5" />
                     ) : prov.id === "gemini" ? (
-                      <Sparkles className="w-4 h-4" />
+                      <Sparkles className="w-3.5 h-3.5" />
                     ) : prov.id === "groq" ? (
-                      <Zap className="w-4 h-4" />
+                      <Zap className="w-3.5 h-3.5" />
                     ) : prov.id === "mistral" ? (
-                      <Flame className="w-4 h-4" />
+                      <Flame className="w-3.5 h-3.5" />
                     ) : prov.id === "openrouter" ? (
-                      <Globe className="w-4 h-4" />
+                      <Globe className="w-3.5 h-3.5" />
                     ) : (
-                      <Cpu className="w-4 h-4" />
+                      <Cpu className="w-3.5 h-3.5" />
                     )}
                   </div>
-                  <span className="text-xs font-semibold text-zinc-900 tracking-tight">
+                  <span className="text-xs font-medium tracking-tight">
                     {prov.name.split(" ")[0]}
                   </span>
                 </div>
 
                 {isSelected && (
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 ring-4 ring-emerald-100 shadow-[0_0_8px_rgba(62,207,142,0.6)]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-900" />
                 )}
               </div>
 
-              <span className="text-[11px] font-mono text-zinc-500 line-clamp-1 mt-0.5">
-                {prov.type === "builtin" ? "Direct SDK" : "OpenAI Gateway"}
+              <span className={cn(
+                "text-[10px] font-mono line-clamp-1",
+                isSelected ? "text-zinc-600" : "text-zinc-400"
+              )}>
+                {prov.type === "builtin" ? "Direct SDK" : "Gateway"}
               </span>
             </button>
           );

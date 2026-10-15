@@ -54,7 +54,7 @@ const BaseChatMessageItem: React.FC<ChatMessageItemProps> = ({
         {/* User Message Layout: Sleek Right-Aligned Bubble */}
         {isUser ? (
           <div className="flex flex-col items-end self-end max-w-[85%] sm:max-w-[75%] space-y-1">
-            <div className="bg-zinc-100 text-zinc-900 rounded-3xl rounded-tr-md px-4 py-2.5 text-sm leading-relaxed shadow-2xs font-normal border border-zinc-200/60 break-words whitespace-pre-wrap">
+            <div className="bg-zinc-100 text-zinc-900 rounded-2xl rounded-tr-xs px-4 py-2.5 text-sm leading-relaxed font-normal border border-zinc-200/80 break-words whitespace-pre-wrap">
               {message.content}
             </div>
             {/* Copy button for User Message (icon only, displayed on hover) */}
@@ -86,7 +86,7 @@ const BaseChatMessageItem: React.FC<ChatMessageItemProps> = ({
             <div className="min-w-0">
               <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
               {isStreaming && (
-                <span className="inline-block w-2 h-4 ml-1 bg-indigo-600 animate-pulse rounded-2xs align-middle" />
+                <span className="inline-block w-2 h-4 ml-1 bg-zinc-900 animate-pulse align-middle" />
               )}
             </div>
 
@@ -99,7 +99,7 @@ const BaseChatMessageItem: React.FC<ChatMessageItemProps> = ({
                   size="icon"
                   onClick={handleCopyMessage}
                   title={copied ? 'Copied' : 'Copy response'}
-                  className="h-7 w-7 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg"
+                  className="h-7 w-7 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-md"
                 >
                   {copied ? (
                     <Check className="w-3.5 h-3.5 text-zinc-700" />
@@ -115,8 +115,8 @@ const BaseChatMessageItem: React.FC<ChatMessageItemProps> = ({
                   onClick={() => setFeedback(feedback === 'liked' ? null : 'liked')}
                   title="Good response"
                   className={cn(
-                    'h-7 w-7 rounded-lg hover:bg-zinc-100',
-                    feedback === 'liked' ? 'text-indigo-600 bg-indigo-50' : 'text-zinc-400 hover:text-zinc-700'
+                    'h-7 w-7 rounded-md hover:bg-zinc-100',
+                    feedback === 'liked' ? 'text-zinc-900 bg-zinc-100 font-medium' : 'text-zinc-400 hover:text-zinc-700'
                   )}
                 >
                   <ThumbsUp className="w-3.5 h-3.5" />
@@ -129,8 +129,8 @@ const BaseChatMessageItem: React.FC<ChatMessageItemProps> = ({
                   onClick={() => setFeedback(feedback === 'disliked' ? null : 'disliked')}
                   title="Poor response"
                   className={cn(
-                    'h-7 w-7 rounded-lg hover:bg-zinc-100',
-                    feedback === 'disliked' ? 'text-rose-600 bg-rose-50' : 'text-zinc-400 hover:text-zinc-700'
+                    'h-7 w-7 rounded-md hover:bg-zinc-100',
+                    feedback === 'disliked' ? 'text-zinc-900 bg-zinc-100 font-medium' : 'text-zinc-400 hover:text-zinc-700'
                   )}
                 >
                   <ThumbsDown className="w-3.5 h-3.5" />
@@ -143,7 +143,7 @@ const BaseChatMessageItem: React.FC<ChatMessageItemProps> = ({
                     size="icon"
                     onClick={onRetry}
                     title="Regenerate response"
-                    className="h-7 w-7 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg"
+                    className="h-7 w-7 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-md"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                   </Button>
