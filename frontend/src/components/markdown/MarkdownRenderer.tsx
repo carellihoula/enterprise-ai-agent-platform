@@ -17,6 +17,7 @@ import { MarkdownRendererProps } from "./types";
 import { processStreamingCodeBlocks } from "./markdownUtils";
 import { CodePreBlock } from "./CodePreBlock";
 import { TableBlock } from "./TableBlock";
+import { InlineCodeBlock } from "./InlineCodeBlock";
 
 const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
   content,
@@ -32,7 +33,7 @@ const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
   return (
     <div
       className={cn(
-        "prose prose-zinc max-w-none text-zinc-800 text-[13.5px] leading-relaxed break-words",
+        "prose prose-zinc max-w-none text-zinc-800 text-sm leading-relaxed break-words",
         className,
       )}
     >
@@ -56,6 +57,10 @@ const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
             </h3>
           ),
           p: ({ children }) => <p className="my-2 leading-relaxed">{children}</p>,
+          hr: () => (
+            // [UI/Visual] Render a subtle, muted horizontal divider line between sections
+            <hr className="my-3.5 border-0 border-t border-zinc-200/60 dark:border-zinc-800/80" />
+          ),
           ul: ({ children }) => (
             <ul className="my-2 ml-4 list-disc space-y-1 text-zinc-700">
               {children}
@@ -68,13 +73,14 @@ const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
           ),
           li: ({ children }) => <li className="leading-relaxed">{children}</li>,
           blockquote: ({ children }) => (
-            <blockquote className="my-3 pl-3.5 border-l-2 border-indigo-500 bg-indigo-50/30 py-1.5 text-zinc-600 rounded-r-lg italic text-xs">
+            // [UI/Visual] Callout/blockquote container with indigo accent bar and matching text-sm font size
+            <blockquote className="my-3 pl-3.5 border-l-2 border-indigo-500 bg-indigo-50/30 py-2 text-zinc-700 rounded-r-lg italic text-sm">
               {children}
             </blockquote>
           ),
           table: ({ children }) => <TableBlock>{children}</TableBlock>,
           thead: ({ children }) => (
-            <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-700 font-semibold text-[11px] uppercase tracking-wider">
+            <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-700 font-semibold text-xs uppercase tracking-wider">
               {children}
             </thead>
           ),
@@ -101,16 +107,9 @@ const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
             </a>
           ),
           code: ({ className: codeClassName, children, ...props }) => {
-            const isInline = !codeClassName && typeof children === "string";
+            const isInline = !codeClassName;
             if (isInline) {
-              return (
-                <code
-                  className="px-1.5 py-0.5 rounded-md bg-zinc-100 text-zinc-800 font-mono text-[12px] border border-zinc-200/60"
-                  {...props}
-                >
-                  {children}
-                </code>
-              );
+              return <InlineCodeBlock {...props}>{children}</InlineCodeBlock>;
             }
             return (
               <code className={codeClassName} {...props}>

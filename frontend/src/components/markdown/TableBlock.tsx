@@ -97,7 +97,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ children }) => {
       <div className="w-full overflow-x-auto rounded-xl border border-zinc-200 shadow-2xs">
         <table
           ref={tableRef}
-          className="w-full text-left text-xs border-collapse"
+          className="w-full text-left text-[13px] border-collapse"
         >
           {children}
         </table>
