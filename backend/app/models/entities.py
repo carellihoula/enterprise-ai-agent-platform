@@ -7,7 +7,7 @@ and individual messages within a conversation history.
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -88,4 +88,36 @@ class SessionMessage(Base):
     # [Relationship] Reference to parent ConversationSession
     session: Mapped["ConversationSession"] = relationship(
         "ConversationSession", back_populates="messages"
+    )
+
+
+class ProviderConfig(Base):
+    """SQLAlchemy ORM model representing persisted LLM provider and assistant settings.
+
+    Attributes:
+        id (str): Primary key identifier, typically matching provider_id.
+        provider_id (str): Canonical provider identifier (e.g., 'gemini', 'openai', 'anthropic', 'custom').
+        models (list[str]): Persisted list of model identifiers added by the user (JSON list).
+        active_model (str | None): Currently selected active model name.
+        temperature (float): Configured sampling temperature (0.0 to 2.0).
+        system_prompt (str | None): Configured system prompt instructions.
+        api_key_encrypted (str | None): Fernet-encrypted API key string.
+        base_url (str | None): Custom base URL endpoint for local or proxy providers.
+        created_at (datetime): Timestamp when configuration record was created.
+        updated_at (datetime): Timestamp when configuration record was last updated.
+    """
+
+    __tablename__ = "provider_configs"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    provider_id: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    models: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    active_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    temperature: Mapped[float] = mapped_column(Float, nullable=False, default=0.7)
+    system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=current_utc_time)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=current_utc_time, onupdate=current_utc_time
     )

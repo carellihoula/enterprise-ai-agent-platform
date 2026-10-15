@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ModelConfigState } from "@/types/chat";
 import { SUPPORTED_PROVIDERS, ProviderDefinition } from "./types";
+import { fetchProviderConfigs, saveProviderConfigApi } from "@/lib/api";
 
 interface UseAssistantConfigProps {
   config: ModelConfigState;
@@ -9,7 +10,7 @@ interface UseAssistantConfigProps {
 }
 
 /**
- * Custom hook encapsulating local storage state, credentials, provider selection,
+ * Custom hook encapsulating database persistence, encrypted credentials,
  * dynamic model lists, and save actions for the assistant configuration view.
  */
 export function useAssistantConfig({
@@ -20,9 +21,7 @@ export function useAssistantConfig({
   const [selectedProviderId, setSelectedProviderId] = useState<string>(
     config.providerId || "gemini",
   );
-  const [activeModel, setActiveModel] = useState<string>(
-    config.modelName || "Gemini 3.8 Flash",
-  );
+  const [activeModel, setActiveModel] = useState<string>(config.modelName || "");
   const [temperature, setTemperature] = useState<number>(
     Math.min(config.temperature ?? 0.7, 1.0),
   );
@@ -34,90 +33,75 @@ export function useAssistantConfig({
   const [apiKeyOpenai, setApiKeyOpenai] = useState<string>("");
   const [apiKeyAnthropic, setApiKeyAnthropic] = useState<string>("");
   const [apiKeyCustom, setApiKeyCustom] = useState<string>("");
-  const [baseUrlCustom, setBaseUrlCustom] = useState<string>("");
+  const [baseUrlCustom, setBaseUrlCustom] = useState<string>("http://localhost:11434/v1");
+
+  const [maskedKeys, setMaskedKeys] = useState<Record<string, string>>({});
+  const [hasApiKeys, setHasApiKeys] = useState<Record<string, boolean>>({});
 
   const [providerModels, setProviderModels] = useState<Record<string, string[]>>({});
   const [newModelInput, setNewModelInput] = useState<string>("");
   const [isSavedFeedback, setIsSavedFeedback] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // [Database Fetch] Load persisted model lists and encrypted credentials on component mount
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    async function loadConfigsFromDb() {
+      try {
+        setIsLoading(true);
+        const configs = await fetchProviderConfigs();
+        const loadedModels: Record<string, string[]> = {};
+        const loadedMasked: Record<string, string> = {};
+        const loadedHasKey: Record<string, boolean> = {};
 
-    setApiKeyGemini(localStorage.getItem("api_key_gemini") || "");
-    setApiKeyOpenai(localStorage.getItem("api_key_openai") || "");
-    setApiKeyAnthropic(localStorage.getItem("api_key_anthropic") || "");
-    setApiKeyCustom(localStorage.getItem("api_key_custom") || "");
-    setBaseUrlCustom(
-      localStorage.getItem("base_url_custom") || "http://localhost:11434/v1",
-    );
+        // [Defaults] Initialize all supported providers as empty model lists
+        SUPPORTED_PROVIDERS.forEach((prov) => {
+          loadedModels[prov.id] = [];
+        });
 
-    const CURRENT_MODELS_CACHE_KEY = "provider_models_cache_v4";
-    const hasInitializedCurrentVersion =
-      localStorage.getItem(CURRENT_MODELS_CACHE_KEY) === "true";
-    if (!hasInitializedCurrentVersion) {
-      SUPPORTED_PROVIDERS.forEach((prov) => {
-        localStorage.removeItem(`provider_models_${prov.id}`);
-      });
-      localStorage.setItem(CURRENT_MODELS_CACHE_KEY, "true");
-    }
-
-    const loadedModels: Record<string, string[]> = {};
-    SUPPORTED_PROVIDERS.forEach((prov) => {
-      const stored = localStorage.getItem(`provider_models_${prov.id}`);
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            loadedModels[prov.id] = parsed;
-            return;
+        // [State Population] Overlay stored database settings
+        configs.forEach((cfg) => {
+          loadedModels[cfg.provider_id] = cfg.models || [];
+          if (cfg.masked_api_key) {
+            loadedMasked[cfg.provider_id] = cfg.masked_api_key;
           }
-        } catch {
-          // [Fallback] Ignore malformed JSON and proceed to defaults
+          loadedHasKey[cfg.provider_id] = cfg.has_api_key;
+
+          if (cfg.provider_id === selectedProviderId) {
+            if (cfg.active_model) setActiveModel(cfg.active_model);
+            if (cfg.temperature !== undefined) setTemperature(cfg.temperature);
+            if (cfg.system_prompt !== undefined) setSystemPrompt(cfg.system_prompt || "");
+            if (cfg.base_url) setBaseUrlCustom(cfg.base_url);
+          }
+        });
+
+        setProviderModels(loadedModels);
+        setMaskedKeys(loadedMasked);
+        setHasApiKeys(loadedHasKey);
+
+        const currentList = loadedModels[selectedProviderId] || [];
+        if (currentList.length > 0 && !currentList.includes(config.modelName)) {
+          setActiveModel(currentList[0]);
         }
+      } catch (err) {
+        console.error("Failed to load provider configurations from backend DB", err);
+      } finally {
+        setIsLoading(false);
       }
-      loadedModels[prov.id] = [...prov.defaultModels];
-    });
-
-    setProviderModels(loadedModels);
-
-    const currentList = loadedModels[selectedProviderId] || [];
-    if (currentList.length === 0) {
-      setActiveModel("");
-      localStorage.removeItem("active_model_name");
-    } else if (!currentList.includes(config.modelName)) {
-      setActiveModel(currentList[0]);
     }
+
+    loadConfigsFromDb();
   }, []);
 
   const currentProviderDef: ProviderDefinition =
     SUPPORTED_PROVIDERS.find((p) => p.id === selectedProviderId) ||
     SUPPORTED_PROVIDERS[0];
 
-  const currentModelList: string[] =
-    providerModels[selectedProviderId] || currentProviderDef.defaultModels;
-
-  useEffect(() => {
-    const list = providerModels[selectedProviderId] || [];
-    if (list.length === 0) {
-      setActiveModel("");
-    } else if (!list.includes(activeModel)) {
-      setActiveModel(list[0]);
-    }
-  }, [selectedProviderId, providerModels]);
+  const currentModelList: string[] = providerModels[selectedProviderId] || [];
 
   const handleSelectProvider = (provId: string) => {
     setSelectedProviderId(provId);
     const modelsForProv = providerModels[provId] || [];
-    if (modelsForProv.length > 0) {
-      setActiveModel(modelsForProv[0]);
-    } else {
-      const defaultDef = SUPPORTED_PROVIDERS.find((p) => p.id === provId);
-      if (defaultDef && defaultDef.defaultModels.length > 0) {
-        setActiveModel(defaultDef.defaultModels[0]);
-      } else {
-        setActiveModel("");
-      }
-    }
+    setActiveModel(modelsForProv.length > 0 ? modelsForProv[0] : "");
   };
 
   const handleAddModel = (e?: React.FormEvent) => {
@@ -136,13 +120,6 @@ export function useAssistantConfig({
     setProviderModels(updatedMap);
     setActiveModel(trimmed);
     setNewModelInput("");
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem(
-        `provider_models_${selectedProviderId}`,
-        JSON.stringify(updatedList),
-      );
-    }
   };
 
   const handleRemoveModel = (modelToRemove: string) => {
@@ -150,49 +127,50 @@ export function useAssistantConfig({
     const updatedMap = { ...providerModels, [selectedProviderId]: updatedList };
     setProviderModels(updatedMap);
 
-    if (activeModel === modelToRemove) {
-      setActiveModel(updatedList.length > 0 ? updatedList[0] : "");
-    }
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem(
-        `provider_models_${selectedProviderId}`,
-        JSON.stringify(updatedList),
-      );
-    }
+    const nextActive = activeModel === modelToRemove ? (updatedList[0] || "") : activeModel;
+    setActiveModel(nextActive);
   };
 
   const handleResetProviderModels = () => {
-    const defaults = [...currentProviderDef.defaultModels];
-    const updatedMap = { ...providerModels, [selectedProviderId]: defaults };
+    // [Reset] Clear the working list to empty (persisted only upon clicking Save)
+    const updatedMap = { ...providerModels, [selectedProviderId]: [] };
     setProviderModels(updatedMap);
-    setActiveModel(defaults[0] || "");
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem(
-        `provider_models_${selectedProviderId}`,
-        JSON.stringify(defaults),
-      );
-    }
+    setActiveModel("");
   };
 
-  const handleSaveAll = () => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("api_key_gemini", apiKeyGemini.trim());
-      localStorage.setItem("api_key_openai", apiKeyOpenai.trim());
-      localStorage.setItem("api_key_anthropic", apiKeyAnthropic.trim());
-      localStorage.setItem("api_key_custom", apiKeyCustom.trim());
-      localStorage.setItem("base_url_custom", baseUrlCustom.trim());
+  const handleSaveAll = async () => {
+    // [Credentials Mapping] Determine if user input a fresh API key to encrypt
+    let keyInput: string | undefined = undefined;
+    if (selectedProviderId === "gemini" && apiKeyGemini) keyInput = apiKeyGemini.trim();
+    else if (selectedProviderId === "openai" && apiKeyOpenai) keyInput = apiKeyOpenai.trim();
+    else if (selectedProviderId === "anthropic" && apiKeyAnthropic) keyInput = apiKeyAnthropic.trim();
+    else if (selectedProviderId === "custom" && apiKeyCustom) keyInput = apiKeyCustom.trim();
+
+    try {
+      const saved = await saveProviderConfigApi(selectedProviderId, {
+        models: currentModelList,
+        active_model: activeModel || currentModelList[0] || null,
+        temperature: Math.min(Math.max(temperature, 0), 1.0),
+        system_prompt: systemPrompt.trim(),
+        api_key: keyInput,
+        base_url: selectedProviderId === "custom" ? baseUrlCustom.trim() : undefined,
+      });
+
+      if (saved.masked_api_key) {
+        setMaskedKeys((prev) => ({ ...prev, [selectedProviderId]: saved.masked_api_key! }));
+        setHasApiKeys((prev) => ({ ...prev, [selectedProviderId]: true }));
+      }
+    } catch (err) {
+      console.error("Failed to persist provider configuration to database", err);
     }
 
     const updatedConfig: ModelConfigState = {
       providerId: selectedProviderId,
-      modelName:
-        activeModel ||
-        currentModelList[0] ||
-        (selectedProviderId === "custom" ? "" : "Gemini 3.8 Flash"),
+      modelName: activeModel || currentModelList[0] || "",
       temperature: Math.min(Math.max(temperature, 0), 1.0),
       systemPrompt: systemPrompt.trim(),
+      baseUrl: selectedProviderId === "custom" ? baseUrlCustom.trim() : undefined,
+      availableModels: currentModelList,
     };
 
     onSaveConfig(updatedConfig);
@@ -200,8 +178,8 @@ export function useAssistantConfig({
     setTimeout(() => setIsSavedFeedback(false), 2500);
   };
 
-  const handleSaveAndLaunch = () => {
-    handleSaveAll();
+  const handleSaveAndLaunch = async () => {
+    await handleSaveAll();
     onNavigateToPlayground();
   };
 
@@ -215,10 +193,13 @@ export function useAssistantConfig({
     apiKeyAnthropic,
     apiKeyCustom,
     baseUrlCustom,
+    maskedKeys,
+    hasApiKeys,
     currentProviderDef,
     currentModelList,
     newModelInput,
     isSavedFeedback,
+    isLoading,
     setTemperature,
     setSystemPrompt,
     setApiKeyGemini,

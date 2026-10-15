@@ -16,6 +16,7 @@ import { AssistantConfigView } from "@/components/AssistantConfigView";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { PRESET_PROVIDERS, ModelConfigState } from "@/types/chat";
+import { fetchProviderConfigs } from "@/lib/api";
 import { useChatSession } from "@/hooks/useChatSession";
 import {
   EngineSubBar,
@@ -34,7 +35,37 @@ export default function EnterpriseAppPage() {
     providerId: PRESET_PROVIDERS[0].id,
     modelName: PRESET_PROVIDERS[0].defaultModel,
     temperature: 0.7,
+    availableModels: [],
   });
+
+  useEffect(() => {
+    async function loadActiveConfigFromDb() {
+      try {
+        const configs = await fetchProviderConfigs();
+        if (configs && configs.length > 0) {
+          const activeProvId =
+            typeof window !== "undefined"
+              ? localStorage.getItem("active_provider_id") || "gemini"
+              : "gemini";
+          const match =
+            configs.find((c) => c.provider_id === activeProvId) || configs[0];
+          if (match) {
+            setModelConfig({
+              providerId: match.provider_id,
+              modelName: match.active_model || (match.models.length > 0 ? match.models[0] : ""),
+              temperature: match.temperature ?? 0.7,
+              systemPrompt: match.system_prompt || "",
+              availableModels: match.models || [],
+              baseUrl: match.base_url || undefined,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load initial provider configs from DB", err);
+      }
+    }
+    loadActiveConfigFromDb();
+  }, []);
 
   const handleOpenConfig = () => {
     setActiveTab("chat");

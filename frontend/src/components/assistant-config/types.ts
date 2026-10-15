@@ -21,28 +21,14 @@ export const SUPPORTED_PROVIDERS: ProviderDefinition[] = [
     type: "builtin",
     description:
       "Direct Google AI Studio integration. Base URL handled natively by LangChain.",
-    defaultModels: [
-      "Gemini 3.8 Flash",
-      "Gemini 3.6 Flash",
-      "Gemini 3.5 Flash",
-      "Gemini 3.5 Flash Lite",
-      "Gemini 3.1 Pro",
-    ],
+    defaultModels: [],
   },
   {
     id: "openai",
     name: "OpenAI (GPT)",
     type: "builtin",
     description: "Official OpenAI API. Base URL handled natively by LangChain.",
-    defaultModels: [
-      "GPT-6 Astra",
-      "GPT-6.1 Sol",
-      "GPT-6 Luna",
-      "GPT-5.6 Sol",
-      "GPT-5.6 Luna",
-      "GPT-4o",
-      "GPT-4o mini",
-    ],
+    defaultModels: [],
   },
   {
     id: "anthropic",
@@ -50,12 +36,7 @@ export const SUPPORTED_PROVIDERS: ProviderDefinition[] = [
     type: "builtin",
     description:
       "Official Anthropic API. Base URL handled natively by LangChain.",
-    defaultModels: [
-      "Claude Fable 5.1",
-      "Claude Opus 5.5",
-      "Claude Sonnet 5.5",
-      "Claude Haiku 5.5",
-    ],
+    defaultModels: [],
   },
   {
     id: "custom",

@@ -41,17 +41,21 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       (p) => p.id.toLowerCase() === config.providerId.toLowerCase()
     ) || PRESET_PROVIDERS[0];
 
-  const suggestedModels = currentProviderObj.suggestedModels || [];
+  const suggestedModels =
+    config.availableModels && config.availableModels.length > 0
+      ? config.availableModels
+      : currentProviderObj.suggestedModels || [];
 
   const handleProviderChange = (newProviderId: string) => {
     const providerPreset =
       PRESET_PROVIDERS.find((p) => p.id === newProviderId) || PRESET_PROVIDERS[0];
 
-    // [State Update] Set default model when changing provider
+    // [State Update] Clear model selection when switching providers until loaded from config/DB
     onChangeConfig({
       ...config,
       providerId: providerPreset.id,
-      modelName: providerPreset.defaultModel,
+      modelName: "",
+      availableModels: [],
     });
   };
 
@@ -103,7 +107,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               disabled={disabled || suggestedModels.length === 0}
             >
               <SelectTrigger className="w-56">
-                <SelectValue placeholder="Select Model" />
+                <SelectValue placeholder={suggestedModels.length === 0 ? "No models configured" : "Select Model"} />
               </SelectTrigger>
               <SelectContent>
                 {suggestedModels.map((modelId) => (

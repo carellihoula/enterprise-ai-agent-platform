@@ -11,6 +11,7 @@ from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.chat import router as chat_router
+from app.api.v1.providers import router as providers_router
 from app.api.v1.sessions import router as sessions_router
 from app.core.config import get_settings
 from app.core.database import init_db
@@ -56,6 +57,7 @@ register_exception_handlers(app)
 # [Routing] Include API v1 routers
 app.include_router(chat_router, prefix=settings.api_v1_prefix)
 app.include_router(sessions_router, prefix=settings.api_v1_prefix)
+app.include_router(providers_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/health", status_code=status.HTTP_200_OK)

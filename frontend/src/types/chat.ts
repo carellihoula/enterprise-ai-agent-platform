@@ -25,6 +25,7 @@ export interface ModelConfigState {
   systemPrompt?: string;
   baseUrl?: string;
   apiKey?: string;
+  availableModels?: string[];
 }
 
 export interface ProviderPreset {
@@ -38,7 +39,25 @@ export const PRESET_PROVIDERS: ProviderPreset[] = [
   {
     id: "gemini",
     name: "Google Gemini",
-    defaultModel: "gemini-3.5-flash-lite",
-    suggestedModels: ["gemini-3.5-flash-lite"],
+    defaultModel: "",
+    suggestedModels: [],
+  },
+  {
+    id: "openai",
+    name: "OpenAI (GPT)",
+    defaultModel: "",
+    suggestedModels: [],
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic Claude",
+    defaultModel: "",
+    suggestedModels: [],
+  },
+  {
+    id: "custom",
+    name: "Custom / Local LLM",
+    defaultModel: "",
+    suggestedModels: [],
   },
 ];

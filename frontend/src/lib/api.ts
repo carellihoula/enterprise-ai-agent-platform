@@ -155,3 +155,55 @@ export async function streamChatCompletion({
     onError?.(err instanceof Error ? err : new Error(String(err)));
   }
 }
+
+export interface ProviderConfigDto {
+  provider_id: string;
+  models: string[];
+  active_model?: string | null;
+  temperature: number;
+  system_prompt?: string | null;
+  masked_api_key?: string | null;
+  has_api_key: boolean;
+  base_url?: string | null;
+  updated_at?: string | null;
+}
+
+export interface SaveProviderConfigPayload {
+  models: string[];
+  active_model?: string | null;
+  temperature: number;
+  system_prompt?: string | null;
+  api_key?: string | null;
+  base_url?: string | null;
+}
+
+export async function fetchProviderConfigs(): Promise<ProviderConfigDto[]> {
+  const res = await fetch(`${API_BASE_URL}/providers/config`, { cache: 'no-store' });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch provider configurations (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function fetchProviderConfig(providerId: string): Promise<ProviderConfigDto> {
+  const res = await fetch(`${API_BASE_URL}/providers/config/${providerId}`, { cache: 'no-store' });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch provider config for ${providerId} (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function saveProviderConfigApi(
+  providerId: string,
+  payload: SaveProviderConfigPayload
+): Promise<ProviderConfigDto> {
+  const res = await fetch(`${API_BASE_URL}/providers/config/${providerId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to save provider config for ${providerId} (${res.status})`);
+  }
+  return res.json();
+}

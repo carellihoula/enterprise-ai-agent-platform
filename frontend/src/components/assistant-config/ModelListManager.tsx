@@ -54,11 +54,11 @@ export const ModelListManager: React.FC<ModelListManagerProps> = ({
           variant="ghost"
           size="sm"
           onClick={onResetProviderModels}
-          title="Reset to default model list"
+          title="Clear model list"
           className="text-[11px] font-mono text-zinc-400 hover:text-zinc-900 h-7 px-2.5 gap-1.5 rounded-lg"
         >
           <RotateCcw className="w-3 h-3 text-zinc-400" />
-          <span>Reset Defaults</span>
+          <span>Clear List</span>
         </Button>
       </div>
 
@@ -66,7 +66,7 @@ export const ModelListManager: React.FC<ModelListManagerProps> = ({
       <form onSubmit={onAddModel} className="flex items-center gap-2">
         <input
           type="text"
-          placeholder={`Type a model name (e.g. ${currentProviderDef.defaultModels[0] || "custom-model-id"})...`}
+          placeholder="Type a model ID (e.g. gpt-4o, gemini-2.5-flash, claude-3-5-sonnet)..."
           value={newModelInput}
           onChange={(e) => setNewModelInput(e.target.value)}
           className="flex-1 px-3.5 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-2xs"
@@ -83,56 +83,56 @@ export const ModelListManager: React.FC<ModelListManagerProps> = ({
 
       {/* List of Models as Interactive Badges */}
       <div className="flex items-center gap-2 flex-wrap pt-1">
-        {currentModelList.map((modelName) => {
-          const isActive = activeModel === modelName;
-          return (
-            <div
-              key={modelName}
-              onClick={() => onSetActiveModel(modelName)}
-              className={cn(
-                "group flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono cursor-pointer transition-all",
-                isActive
-                  ? "bg-zinc-900 text-emerald-400 border-zinc-900 shadow-xs ring-1 ring-emerald-500/40"
-                  : "bg-white text-zinc-700 border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50/60",
-              )}
-            >
-              <span className="font-semibold">{modelName}</span>
-
-              {isActive && (
-                <Badge
-                  variant="secondary"
-                  className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] px-1.5 py-0 h-4 font-mono font-normal"
-                >
-                  Active
-                </Badge>
-              )}
-
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemoveModel(modelName);
-                }}
-                title={`Remove ${modelName}`}
+        {currentModelList.length === 0 ? (
+          <div className="w-full py-4 px-3 text-center rounded-lg border border-dashed border-zinc-200 bg-zinc-50/50 text-xs text-zinc-400 font-mono">
+            No models configured for this provider yet. Type a model ID above and click &quot;Add Model&quot;.
+          </div>
+        ) : (
+          currentModelList.map((modelName) => {
+            const isActive = activeModel === modelName;
+            return (
+              <div
+                key={modelName}
+                onClick={() => onSetActiveModel(modelName)}
                 className={cn(
-                  "p-0.5 rounded transition-colors",
+                  "group flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono cursor-pointer transition-all",
                   isActive
-                    ? "hover:bg-zinc-800 text-zinc-400 hover:text-rose-400"
-                    : "hover:bg-zinc-100 text-zinc-300 hover:text-rose-600",
+                    ? "bg-zinc-900 text-emerald-400 border-zinc-900 shadow-xs ring-1 ring-emerald-500/40"
+                    : "bg-white text-zinc-700 border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50/60",
                 )}
               >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
-          );
-        })}
-      </div>
+                <span className="font-semibold">{modelName}</span>
 
-      {currentModelList.length === 0 && (
-        <div className="py-6 text-center text-xs text-zinc-400 bg-white border border-dashed border-zinc-200 rounded-lg">
-          No models configured. Add your first model using the input above.
-        </div>
-      )}
+                {isActive && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] px-1.5 py-0 h-4 font-mono font-normal"
+                  >
+                    Active
+                  </Badge>
+                )}
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveModel(modelName);
+                  }}
+                  title={`Remove ${modelName}`}
+                  className={cn(
+                    "p-0.5 rounded transition-colors",
+                    isActive
+                      ? "hover:bg-zinc-800 text-zinc-400 hover:text-rose-400"
+                      : "hover:bg-zinc-100 text-zinc-300 hover:text-rose-600",
+                  )}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
 
       {/* Active Model Indicator */}
       {currentModelList.length > 0 && activeModel && (

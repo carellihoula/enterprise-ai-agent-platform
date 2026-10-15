@@ -39,6 +39,8 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
     apiKeyAnthropic,
     apiKeyCustom,
     baseUrlCustom,
+    maskedKeys,
+    hasApiKeys,
     currentProviderDef,
     currentModelList,
     newModelInput,
@@ -90,6 +92,8 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
           setApiKeyCustom={setApiKeyCustom}
           baseUrlCustom={baseUrlCustom}
           setBaseUrlCustom={setBaseUrlCustom}
+          maskedKey={maskedKeys[currentProviderDef.id]}
+          hasApiKey={hasApiKeys[currentProviderDef.id]}
         />
 
         <ModelListManager

@@ -16,6 +16,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal, get_db
+from app.core.security import decrypt_api_key
+from app.models.entities import ProviderConfig
 from app.providers.llm.base import (
     ChatMessage,
     MessageRole,
@@ -176,6 +178,40 @@ def _prepare_messages_context(
     return full_messages, session.id
 
 
+def _resolve_provider_credentials(
+    request: ChatRequest,
+    db: Session,
+) -> tuple[str | None, str | None, str | None]:
+    """Resolves API key, base URL, and system instruction from request or persisted database config.
+
+    Args:
+        request (ChatRequest): Incoming chat request payload.
+        db (Session): Active database session.
+
+    Returns:
+        tuple[str | None, str | None, str | None]: Tuple of (api_key, base_url, system_instruction).
+    """
+    api_key = request.api_key
+    base_url = request.base_url
+    system_instruction = request.system_instruction
+
+    # [Database Fallback] If credentials not provided in request, check database ProviderConfig
+    stored_cfg = (
+        db.query(ProviderConfig)
+        .filter(ProviderConfig.provider_id == request.provider_name.lower().strip())
+        .first()
+    )
+    if stored_cfg:
+        if not api_key and stored_cfg.api_key_encrypted:
+            api_key = decrypt_api_key(stored_cfg.api_key_encrypted)
+        if not base_url and stored_cfg.base_url:
+            base_url = stored_cfg.base_url
+        if not system_instruction and stored_cfg.system_prompt:
+            system_instruction = stored_cfg.system_prompt
+
+    return api_key, base_url, system_instruction
+
+
 @router.post("", response_model=ChatResponse, status_code=status.HTTP_200_OK)
 async def generate_chat(
     request: ChatRequest,
@@ -194,14 +230,17 @@ async def generate_chat(
         ProviderError: If the model provider endpoint fails.
         DomainError: If the specified session_id is not found.
     """
+    resolved_api_key, resolved_base_url, resolved_system_prompt = _resolve_provider_credentials(
+        request, db
+    )
     provider = _get_provider(
         request.provider_name,
         request.model_name,
-        api_key=request.api_key,
-        base_url=request.base_url,
+        api_key=resolved_api_key,
+        base_url=resolved_base_url,
         temperature=request.temperature,
         max_tokens=request.max_tokens,
-        system_instruction=request.system_instruction,
+        system_instruction=resolved_system_prompt,
     )
     full_messages, target_session_id = _prepare_messages_context(
         request.messages, request.session_id, db
@@ -211,7 +250,7 @@ async def generate_chat(
         messages=full_messages,
         temperature=request.temperature,
         max_tokens=request.max_tokens,
-        system_instruction=request.system_instruction,
+        system_instruction=resolved_system_prompt,
     )
 
     # [Persistence] If session_id provided, store user prompt and assistant response
@@ -249,14 +288,17 @@ async def stream_chat(
     Returns:
         StreamingResponse: SSE stream formatted with text/event-stream MIME type.
     """
+    resolved_api_key, resolved_base_url, resolved_system_prompt = _resolve_provider_credentials(
+        request, db
+    )
     provider = _get_provider(
         request.provider_name,
         request.model_name,
-        api_key=request.api_key,
-        base_url=request.base_url,
+        api_key=resolved_api_key,
+        base_url=resolved_base_url,
         temperature=request.temperature,
         max_tokens=request.max_tokens,
-        system_instruction=request.system_instruction,
+        system_instruction=resolved_system_prompt,
     )
     full_messages, target_session_id = _prepare_messages_context(
         request.messages, request.session_id, db
