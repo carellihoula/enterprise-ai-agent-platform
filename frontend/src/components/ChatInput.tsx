@@ -24,6 +24,8 @@ interface ChatInputProps {
   onStopStreaming?: () => void;
   disabled?: boolean;
   placeholder?: string;
+  onOpenAssistantPicker?: () => void;
+  activeAssistantName?: string;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -32,6 +34,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onStopStreaming,
   disabled = false,
   placeholder = 'Ask a question, analyze data, or instruct an agent...',
+  onOpenAssistantPicker,
+  activeAssistantName,
 }) => {
   const [prompt, setPrompt] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -96,11 +100,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
             <button
               type="button"
-              title="Search internal enterprise knowledge"
-              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/60 rounded-xl transition-colors"
+              onClick={onOpenAssistantPicker}
+              title="Select AI Assistant"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200/80 border border-zinc-200/80 rounded-xl transition-all shadow-2xs group"
             >
-              <Globe className="w-3.5 h-3.5 text-zinc-400" />
-              <span className="hidden sm:inline">Enterprise Search</span>
+              <Globe className="w-3.5 h-3.5 text-zinc-400 group-hover:text-indigo-600 transition-colors" />
+              <span className="hidden sm:inline font-medium">
+                {activeAssistantName ? `Assistant: ${activeAssistantName}` : "Enterprise Search"}
+              </span>
             </button>
           </div>
 

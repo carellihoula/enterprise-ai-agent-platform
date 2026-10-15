@@ -48,7 +48,8 @@ class ModelConfig(BaseModel):
     """
 
     provider_id: str = Field(default="openai", description="Target provider adapter identifier")
-    model_name: str = Field(default="gpt-4o", description="Target model version identifier")
+    # [No Predefined Models] Model identifiers are always user-defined per assistant
+    model_name: str = Field(default="", description="Target model version identifier")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
     max_tokens: int | None = Field(default=None, description="Max completion token limit")
     system_prompt: str | None = Field(default=None, description="System prompt instructions")

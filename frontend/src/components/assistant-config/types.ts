@@ -1,4 +1,5 @@
 import { ModelConfigState } from "@/types/chat";
+import { Assistant, AssistantCreatePayload, AssistantUpdatePayload } from "@/types/assistant";
 
 /**
  * Interface defining a supported LLM provider specification.
@@ -12,7 +13,8 @@ export interface ProviderDefinition {
 }
 
 /**
- * Canonical catalog of supported LLM providers and their default frontier models.
+ * Canonical catalog of supported LLM providers starting with completely empty model catalogs.
+ * Models are explicitly user-defined and dynamically managed per assistant.
  */
 export const SUPPORTED_PROVIDERS: ProviderDefinition[] = [
   {
@@ -77,6 +79,9 @@ export const SUPPORTED_PROVIDERS: ProviderDefinition[] = [
  */
 export interface AssistantConfigViewProps {
   config: ModelConfigState;
+  assistantToEdit?: Assistant | null;
   onSaveConfig: (updatedConfig: ModelConfigState) => void;
   onNavigateToPlayground: () => void;
+  onCreateAssistant?: (payload: AssistantCreatePayload) => Promise<void>;
+  onUpdateAssistant?: (id: string, payload: AssistantUpdatePayload) => Promise<void>;
 }

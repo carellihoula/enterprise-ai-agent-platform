@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { Label } from "@/components/ui/label";
-import { Key, Link, Shield, CheckCircle2 } from "lucide-react";
+import { Key, Link, Shield, CheckCircle2, Eye, EyeOff, X } from "lucide-react";
 import { ProviderDefinition } from "./types";
 
 interface ProviderCredentialsProps {
@@ -55,6 +55,7 @@ export const ProviderCredentials: React.FC<ProviderCredentialsProps> = ({
   maskedKey,
   hasApiKey = false,
 }) => {
+  const [showKey, setShowKey] = useState(false);
   const isCustomEndpoint =
     currentProviderDef.id === "custom" || currentProviderDef.id === "openrouter";
 
@@ -111,16 +112,38 @@ export const ProviderCredentials: React.FC<ProviderCredentialsProps> = ({
           <Label className="text-[11px] font-mono font-medium text-zinc-700">
             {currentProviderDef.name} API Key
           </Label>
-          <input
-            type="password"
-            placeholder={getApiKeyPlaceholder(currentProviderDef.id, hasApiKey, maskedKey)}
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="w-full px-3.5 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-2xs"
-          />
+          <div className="relative flex items-center">
+            <input
+              type={showKey ? "text" : "password"}
+              placeholder={getApiKeyPlaceholder(currentProviderDef.id, hasApiKey, maskedKey)}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="w-full pl-3.5 pr-16 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-2xs"
+            />
+            <div className="absolute right-2 flex items-center gap-1">
+              {apiKey && (
+                <button
+                  type="button"
+                  onClick={() => setApiKey("")}
+                  title="Clear API key"
+                  className="p-1 text-zinc-400 hover:text-zinc-600 rounded transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                title={showKey ? "Hide API key" : "Show API key"}
+                className="p-1 text-zinc-400 hover:text-zinc-600 rounded transition-colors"
+              >
+                {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
           <p className="text-[11px] text-zinc-400">
             {hasApiKey
-              ? "Key is stored encrypted in database. Type a new key to update, or leave empty to keep existing."
+              ? "Key is stored encrypted in database. Type a new key to update, or leave unchanged."
               : "API key will be encrypted and saved in your database."}
           </p>
         </div>

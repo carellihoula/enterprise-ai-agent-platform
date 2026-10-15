@@ -10,7 +10,9 @@ import {
 
 interface UseChatSessionOptions {
   modelConfig: ModelConfigState;
+  activeAssistantId?: string;
   onSessionSelected?: () => void;
+  onAssistantMatched?: (assistantId: string) => void;
 }
 
 /**
@@ -19,7 +21,9 @@ interface UseChatSessionOptions {
  */
 export function useChatSession({
   modelConfig,
+  activeAssistantId,
   onSessionSelected,
+  onAssistantMatched,
 }: UseChatSessionOptions) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -59,6 +63,10 @@ export function useChatSession({
     try {
       const detail = await fetchSessionDetails(sessionId);
       setMessages(detail.messages || []);
+      // [Sync] Update selected assistant if session was bound to an assistant
+      if (detail.assistant_id && onAssistantMatched) {
+        onAssistantMatched(detail.assistant_id);
+      }
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to load conversation messages");
     } finally {
@@ -66,10 +74,11 @@ export function useChatSession({
     }
   };
 
-  const handleNewSession = async () => {
+  const handleNewSession = async (customTitle?: string, assistantIdOverride?: string) => {
     setErrorMessage(null);
     try {
-      const newSession = await createSession("New Conversation");
+      const targetAssistantId = assistantIdOverride !== undefined ? assistantIdOverride : activeAssistantId;
+      const newSession = await createSession(customTitle || "New Conversation", targetAssistantId);
       setSessions((prev) => [newSession, ...prev]);
       setCurrentSessionId(newSession.id);
       setMessages([]);
@@ -109,7 +118,7 @@ export function useChatSession({
 
     if (!activeSessionId) {
       try {
-        const newSession = await createSession(content.slice(0, 30));
+        const newSession = await createSession(content.slice(0, 30), activeAssistantId);
         setSessions((prev) => [newSession, ...prev]);
         activeSessionId = newSession.id;
         setCurrentSessionId(newSession.id);
@@ -144,6 +153,7 @@ export function useChatSession({
 
     await streamChatCompletion({
       sessionId: activeSessionId,
+      assistantId: activeAssistantId,
       messages: [userMessage],
       providerName: modelConfig.providerId,
       modelName: modelConfig.modelName,

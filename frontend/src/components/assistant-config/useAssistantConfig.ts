@@ -1,108 +1,147 @@
 import { useState, useEffect } from "react";
 import { ModelConfigState } from "@/types/chat";
+import { Assistant, AssistantCreatePayload, AssistantUpdatePayload } from "@/types/assistant";
 import { SUPPORTED_PROVIDERS, ProviderDefinition } from "./types";
-import { fetchProviderConfigs, saveProviderConfigApi } from "@/lib/api";
 
 interface UseAssistantConfigProps {
   config: ModelConfigState;
+  assistantToEdit?: Assistant | null;
   onSaveConfig: (updatedConfig: ModelConfigState) => void;
   onNavigateToPlayground: () => void;
+  onCreateAssistant?: (payload: AssistantCreatePayload) => Promise<void>;
+  onUpdateAssistant?: (id: string, payload: AssistantUpdatePayload) => Promise<void>;
 }
 
 /**
- * Custom hook encapsulating database persistence, encrypted credentials,
- * dynamic model lists, and save actions for the assistant configuration view.
+ * Custom hook managing assistant creation/editing, provider credentials, and hyperparameters
+ * stored directly within the Assistant model.
  */
 export function useAssistantConfig({
   config,
+  assistantToEdit,
   onSaveConfig,
   onNavigateToPlayground,
+  onCreateAssistant,
+  onUpdateAssistant,
 }: UseAssistantConfigProps) {
+  const [name, setName] = useState<string>(assistantToEdit?.name || "");
+  const [description, setDescription] = useState<string>(assistantToEdit?.description || "");
+  const [avatar, setAvatar] = useState<string>(assistantToEdit?.avatar || "bot");
+  const [isDefault, setIsDefault] = useState<boolean>(assistantToEdit?.is_default || false);
+
   const [selectedProviderId, setSelectedProviderId] = useState<string>(
-    config.providerId || "gemini",
+    assistantToEdit?.provider_id || config.providerId || "groq",
   );
-  const [activeModel, setActiveModel] = useState<string>(config.modelName || "");
+  const [activeModel, setActiveModel] = useState<string>(
+    assistantToEdit?.model_name || config.modelName || "",
+  );
   const [temperature, setTemperature] = useState<number>(
-    Math.min(config.temperature ?? 0.7, 1.0),
+    Math.min(assistantToEdit?.temperature ?? config.temperature ?? 0.7, 1.0),
   );
   const [systemPrompt, setSystemPrompt] = useState<string>(
-    config.systemPrompt || "",
+    assistantToEdit?.system_prompt ?? config.systemPrompt ?? "",
   );
 
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>(() => {
+    if (assistantToEdit?.provider_id && assistantToEdit.masked_api_key) {
+      return { [assistantToEdit.provider_id]: assistantToEdit.masked_api_key };
+    }
+    return {};
+  });
   const [baseUrls, setBaseUrls] = useState<Record<string, string>>({
     custom: "http://localhost:11434/v1",
     openrouter: "https://openrouter.ai/api/v1",
   });
-
-  const [maskedKeys, setMaskedKeys] = useState<Record<string, string>>({});
-  const [hasApiKeys, setHasApiKeys] = useState<Record<string, boolean>>({});
-
-  const [providerModels, setProviderModels] = useState<Record<string, string[]>>({});
-  const [newModelInput, setNewModelInput] = useState<string>("");
-  const [isSavedFeedback, setIsSavedFeedback] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-
-  // [Database Fetch] Load persisted model lists and encrypted credentials on component mount
-  useEffect(() => {
-    async function loadConfigsFromDb() {
-      try {
-        setIsLoading(true);
-        const configs = await fetchProviderConfigs();
-        const loadedModels: Record<string, string[]> = {};
-        const loadedMasked: Record<string, string> = {};
-        const loadedHasKey: Record<string, boolean> = {};
-        const loadedUrls: Record<string, string> = {
-          custom: "http://localhost:11434/v1",
-          openrouter: "https://openrouter.ai/api/v1",
-        };
-
-        // [Defaults] Initialize all supported providers as empty model lists
-        SUPPORTED_PROVIDERS.forEach((prov) => {
-          loadedModels[prov.id] = [];
-        });
-
-        // [State Population] Overlay stored database settings
-        configs.forEach((cfg) => {
-          loadedModels[cfg.provider_id] = cfg.models || [];
-          if (cfg.masked_api_key) {
-            loadedMasked[cfg.provider_id] = cfg.masked_api_key;
-          }
-          loadedHasKey[cfg.provider_id] = cfg.has_api_key;
-          if (cfg.base_url) {
-            loadedUrls[cfg.provider_id] = cfg.base_url;
-          }
-
-          if (cfg.provider_id === selectedProviderId) {
-            if (cfg.active_model) setActiveModel(cfg.active_model);
-            if (cfg.temperature !== undefined) setTemperature(cfg.temperature);
-            if (cfg.system_prompt !== undefined) setSystemPrompt(cfg.system_prompt || "");
-          }
-        });
-
-        setProviderModels(loadedModels);
-        setMaskedKeys(loadedMasked);
-        setHasApiKeys(loadedHasKey);
-        setBaseUrls(loadedUrls);
-
-        const currentList = loadedModels[selectedProviderId] || [];
-        if (currentList.length > 0 && !currentList.includes(config.modelName)) {
-          setActiveModel(currentList[0]);
-        }
-      } catch (err) {
-        console.error("Failed to load provider configurations from backend DB", err);
-      } finally {
-        setIsLoading(false);
-      }
+  const [maskedKeys, setMaskedKeys] = useState<Record<string, string>>(() => {
+    if (assistantToEdit?.provider_id && assistantToEdit.masked_api_key) {
+      return { [assistantToEdit.provider_id]: assistantToEdit.masked_api_key };
     }
+    return {};
+  });
+  const [hasApiKeys, setHasApiKeys] = useState<Record<string, boolean>>(() => {
+    if (assistantToEdit?.provider_id && assistantToEdit.has_api_key) {
+      return { [assistantToEdit.provider_id]: true };
+    }
+    return {};
+  });
+  const [providerModels, setProviderModels] = useState<Record<string, string[]>>(() => {
+    const initialModels: Record<string, string[]> = {};
+    SUPPORTED_PROVIDERS.forEach((prov) => {
+      initialModels[prov.id] = [];
+    });
+    if (assistantToEdit?.model_name) {
+      initialModels[assistantToEdit.provider_id] = [assistantToEdit.model_name];
+    }
+    return initialModels;
+  });
+  const [newModelInput, setNewModelInput] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
-    loadConfigsFromDb();
-  }, []);
+  // [Sync] Update state when assistantToEdit changes
+  useEffect(() => {
+    if (assistantToEdit) {
+      setName(assistantToEdit.name);
+      setDescription(assistantToEdit.description || "");
+      setAvatar(assistantToEdit.avatar || "bot");
+      setSelectedProviderId(assistantToEdit.provider_id);
+      setActiveModel(assistantToEdit.model_name || "");
+      setTemperature(assistantToEdit.temperature ?? 0.7);
+      setSystemPrompt(assistantToEdit.system_prompt || "");
+      setIsDefault(assistantToEdit.is_default || false);
+      if (assistantToEdit.model_name) {
+        setProviderModels((prev) => {
+          const list = prev[assistantToEdit.provider_id] || [];
+          if (!list.includes(assistantToEdit.model_name)) {
+            return {
+              ...prev,
+              [assistantToEdit.provider_id]: [assistantToEdit.model_name, ...list],
+            };
+          }
+          return prev;
+        });
+      }
+      if (assistantToEdit.masked_api_key) {
+        setMaskedKeys((prev) => ({
+          ...prev,
+          [assistantToEdit.provider_id]: assistantToEdit.masked_api_key!,
+        }));
+        setHasApiKeys((prev) => ({
+          ...prev,
+          [assistantToEdit.provider_id]: true,
+        }));
+        setApiKeys((prev) => ({
+          ...prev,
+          [assistantToEdit.provider_id]: assistantToEdit.masked_api_key!,
+        }));
+      } else {
+        setHasApiKeys((prev) => ({
+          ...prev,
+          [assistantToEdit.provider_id]: false,
+        }));
+        setApiKeys((prev) => ({
+          ...prev,
+          [assistantToEdit.provider_id]: "",
+        }));
+      }
+      if (assistantToEdit.base_url) {
+        setBaseUrls((prev) => ({
+          ...prev,
+          [assistantToEdit.provider_id]: assistantToEdit.base_url!,
+        }));
+      }
+    } else {
+      setName("");
+      setDescription("");
+      setAvatar("bot");
+      setIsDefault(false);
+      setActiveModel("");
+      setApiKeys({});
+    }
+  }, [assistantToEdit]);
 
   const currentProviderDef: ProviderDefinition =
-    SUPPORTED_PROVIDERS.find((p) => p.id === selectedProviderId) ||
-    SUPPORTED_PROVIDERS[0];
-
+    SUPPORTED_PROVIDERS.find((p) => p.id === selectedProviderId) || SUPPORTED_PROVIDERS[0];
   const currentModelList: string[] = providerModels[selectedProviderId] || [];
 
   const handleSelectProvider = (provId: string) => {
@@ -115,33 +154,29 @@ export function useAssistantConfig({
     if (e) e.preventDefault();
     const trimmed = newModelInput.trim();
     if (!trimmed) return;
-
-    if (currentModelList.includes(trimmed)) {
+    const currentList = providerModels[selectedProviderId] || [];
+    if (currentList.includes(trimmed)) {
       setActiveModel(trimmed);
       setNewModelInput("");
       return;
     }
-
-    const updatedList = [...currentModelList, trimmed];
-    const updatedMap = { ...providerModels, [selectedProviderId]: updatedList };
-    setProviderModels(updatedMap);
+    const updatedList = [...currentList, trimmed];
+    setProviderModels((prev) => ({ ...prev, [selectedProviderId]: updatedList }));
     setActiveModel(trimmed);
     setNewModelInput("");
   };
 
   const handleRemoveModel = (modelToRemove: string) => {
-    const updatedList = currentModelList.filter((m) => m !== modelToRemove);
-    const updatedMap = { ...providerModels, [selectedProviderId]: updatedList };
-    setProviderModels(updatedMap);
-
-    const nextActive = activeModel === modelToRemove ? (updatedList[0] || "") : activeModel;
-    setActiveModel(nextActive);
+    const currentList = providerModels[selectedProviderId] || [];
+    const updatedList = currentList.filter((m) => m !== modelToRemove);
+    setProviderModels((prev) => ({ ...prev, [selectedProviderId]: updatedList }));
+    if (activeModel === modelToRemove) {
+      setActiveModel(updatedList[0] || "");
+    }
   };
 
   const handleResetProviderModels = () => {
-    // [Reset] Clear the working list to empty (persisted only upon clicking Save)
-    const updatedMap = { ...providerModels, [selectedProviderId]: [] };
-    setProviderModels(updatedMap);
+    setProviderModels((prev) => ({ ...prev, [selectedProviderId]: [] }));
     setActiveModel("");
   };
 
@@ -157,54 +192,92 @@ export function useAssistantConfig({
   const setCurrentBaseUrl = (val: string) =>
     setBaseUrls((prev) => ({ ...prev, [selectedProviderId]: val }));
 
-  const handleSaveAll = async () => {
-    // [Credentials Mapping] Determine if user input a fresh API key to encrypt
-    const rawKey = apiKeys[selectedProviderId];
-    const keyInput = rawKey && rawKey.trim().length > 0 ? rawKey.trim() : undefined;
-    const isCustomUrlProvider =
-      selectedProviderId === "custom" || selectedProviderId === "openrouter";
-    const baseUrlInput = isCustomUrlProvider
-      ? baseUrls[selectedProviderId]?.trim()
-      : undefined;
+  // [Submit Action] Handle Create vs Modify Assistant
+  const handleSubmitAssistant = async () => {
+    if (!name.trim()) {
+      setValidationError("Please specify an Assistant Name");
+      return;
+    }
+    setValidationError(null);
+    setIsSubmitting(true);
 
     try {
-      const saved = await saveProviderConfigApi(selectedProviderId, {
-        models: currentModelList,
-        active_model: activeModel || currentModelList[0] || null,
-        temperature: Math.min(Math.max(temperature, 0), 1.0),
-        system_prompt: systemPrompt.trim(),
-        api_key: keyInput,
-        base_url: baseUrlInput,
+      const rawKey = apiKeys[selectedProviderId]?.trim();
+      const maskedKey = maskedKeys[selectedProviderId];
+      const isCustomUrl = selectedProviderId === "custom" || selectedProviderId === "openrouter";
+      const baseUrlInput = isCustomUrl ? baseUrls[selectedProviderId]?.trim() : undefined;
+
+      // [Credential Guard] Distinguish between unchanged masked key, newly typed key, and cleared key
+      let apiKeyToSubmit: string | undefined = undefined;
+      if (rawKey !== undefined) {
+        if (rawKey === maskedKey || (maskedKey && rawKey.includes("•"))) {
+          // Key unchanged from masked representation: omit to preserve DB ciphertext
+          apiKeyToSubmit = undefined;
+        } else if (rawKey === "") {
+          // Explicitly cleared by the user
+          apiKeyToSubmit = "";
+        } else {
+          // New plaintext key entered
+          apiKeyToSubmit = rawKey;
+        }
+      }
+
+      const finalModelName = activeModel || currentModelList[0] || "";
+
+      if (assistantToEdit && onUpdateAssistant) {
+        await onUpdateAssistant(assistantToEdit.id, {
+          name: name.trim(),
+          description: description.trim(),
+          avatar,
+          provider_id: selectedProviderId,
+          model_name: finalModelName,
+          temperature,
+          system_prompt: systemPrompt.trim(),
+          is_default: isDefault,
+          api_key: apiKeyToSubmit,
+          base_url: baseUrlInput,
+        });
+      } else if (onCreateAssistant) {
+        await onCreateAssistant({
+          name: name.trim(),
+          description: description.trim(),
+          avatar,
+          provider_id: selectedProviderId,
+          model_name: finalModelName,
+          temperature,
+          system_prompt: systemPrompt.trim(),
+          is_default: isDefault,
+          api_key: apiKeyToSubmit || undefined,
+          base_url: baseUrlInput,
+        });
+      }
+
+      onSaveConfig({
+        providerId: selectedProviderId,
+        modelName: finalModelName,
+        temperature,
+        systemPrompt: systemPrompt.trim(),
+        baseUrl: baseUrlInput,
+        availableModels: currentModelList,
       });
 
-      if (saved.masked_api_key) {
-        setMaskedKeys((prev) => ({ ...prev, [selectedProviderId]: saved.masked_api_key! }));
-        setHasApiKeys((prev) => ({ ...prev, [selectedProviderId]: true }));
-      }
-    } catch (err) {
-      console.error("Failed to persist provider configuration to database", err);
+      onNavigateToPlayground();
+    } catch (err: any) {
+      setValidationError(err.message || "Failed to save assistant");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    const updatedConfig: ModelConfigState = {
-      providerId: selectedProviderId,
-      modelName: activeModel || currentModelList[0] || "",
-      temperature: Math.min(Math.max(temperature, 0), 1.0),
-      systemPrompt: systemPrompt.trim(),
-      baseUrl: baseUrlInput,
-      availableModels: currentModelList,
-    };
-
-    onSaveConfig(updatedConfig);
-    setIsSavedFeedback(true);
-    setTimeout(() => setIsSavedFeedback(false), 2500);
-  };
-
-  const handleSaveAndLaunch = async () => {
-    await handleSaveAll();
-    onNavigateToPlayground();
   };
 
   return {
+    name,
+    setName,
+    description,
+    setDescription,
+    avatar,
+    setAvatar,
+    isDefault,
+    setIsDefault,
     selectedProviderId,
     activeModel,
     temperature,
@@ -218,8 +291,8 @@ export function useAssistantConfig({
     currentProviderDef,
     currentModelList,
     newModelInput,
-    isSavedFeedback,
-    isLoading,
+    isSubmitting,
+    validationError,
     setTemperature,
     setSystemPrompt,
     setNewModelInput,
@@ -228,7 +301,6 @@ export function useAssistantConfig({
     handleAddModel,
     handleRemoveModel,
     handleResetProviderModels,
-    handleSaveAll,
-    handleSaveAndLaunch,
+    handleSubmitAssistant,
   };
 }

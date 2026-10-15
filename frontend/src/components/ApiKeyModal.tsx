@@ -8,7 +8,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { PRESET_PROVIDERS, ModelConfigState } from '@/types/chat';
-import { saveProviderConfigApi } from '@/lib/api';
 import { GenericModal } from '@/components/ui/generic-modal';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -79,27 +78,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
     }));
   };
 
-  const handleSaveAll = async () => {
-    // [Persistence] Save API Keys & Base URLs to database with encryption
-    let activeKey: string | undefined = undefined;
-    if (localConfig.providerId === 'gemini' && geminiKey) activeKey = geminiKey.trim();
-    else if (localConfig.providerId === 'openai' && openaiKey) activeKey = openaiKey.trim();
-    else if (localConfig.providerId === 'anthropic' && anthropicKey) activeKey = anthropicKey.trim();
-    else if (localConfig.providerId === 'custom' && customKey) activeKey = customKey.trim();
-
-    try {
-      await saveProviderConfigApi(localConfig.providerId, {
-        models: localConfig.availableModels || [],
-        active_model: localConfig.modelName || null,
-        temperature: localConfig.temperature,
-        system_prompt: localConfig.systemPrompt,
-        api_key: activeKey,
-        base_url: localConfig.providerId === 'custom' ? baseUrl.trim() : undefined,
-      });
-    } catch (err) {
-      console.error('Failed to save provider config from modal to database', err);
-    }
-
+  const handleSaveAll = () => {
     // [State Update] Propagate model configuration upwards
     onSaveConfig(localConfig);
     onClose();

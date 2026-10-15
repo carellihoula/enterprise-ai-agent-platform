@@ -6,6 +6,7 @@
  */
 
 import { Message, Session } from '@/types/chat';
+import { Assistant, AssistantCreatePayload, AssistantUpdatePayload } from '@/types/assistant';
 import { cleanSerializedContentBlocks } from '@/lib/utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
@@ -18,11 +19,11 @@ export async function fetchSessions(): Promise<Session[]> {
   return res.json();
 }
 
-export async function createSession(title?: string): Promise<Session> {
+export async function createSession(title?: string, assistantId?: string): Promise<Session> {
   const res = await fetch(`${API_BASE_URL}/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, assistant_id: assistantId }),
   });
   if (!res.ok) {
     throw new Error(`Failed to create session (${res.status})`);
@@ -49,6 +50,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
 
 export interface StreamChatParams {
   sessionId?: string;
+  assistantId?: string;
   messages: Message[];
   providerName: string;
   modelName: string;
@@ -65,6 +67,7 @@ export interface StreamChatParams {
 
 export async function streamChatCompletion({
   sessionId,
+  assistantId,
   messages,
   providerName,
   modelName,
@@ -85,6 +88,7 @@ export async function streamChatCompletion({
       signal: abortSignal,
       body: JSON.stringify({
         session_id: sessionId,
+        assistant_id: assistantId,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
         provider_name: providerName,
         model_name: modelName,
@@ -156,54 +160,54 @@ export async function streamChatCompletion({
   }
 }
 
-export interface ProviderConfigDto {
-  provider_id: string;
-  models: string[];
-  active_model?: string | null;
-  temperature: number;
-  system_prompt?: string | null;
-  masked_api_key?: string | null;
-  has_api_key: boolean;
-  base_url?: string | null;
-  updated_at?: string | null;
-}
-
-export interface SaveProviderConfigPayload {
-  models: string[];
-  active_model?: string | null;
-  temperature: number;
-  system_prompt?: string | null;
-  api_key?: string | null;
-  base_url?: string | null;
-}
-
-export async function fetchProviderConfigs(): Promise<ProviderConfigDto[]> {
-  const res = await fetch(`${API_BASE_URL}/providers/config`, { cache: 'no-store' });
+export async function fetchAssistants(): Promise<Assistant[]> {
+  const res = await fetch(`${API_BASE_URL}/assistants`, { cache: 'no-store' });
   if (!res.ok) {
-    throw new Error(`Failed to fetch provider configurations (${res.status})`);
+    throw new Error(`Failed to fetch assistants (${res.status})`);
   }
   return res.json();
 }
 
-export async function fetchProviderConfig(providerId: string): Promise<ProviderConfigDto> {
-  const res = await fetch(`${API_BASE_URL}/providers/config/${providerId}`, { cache: 'no-store' });
+export async function fetchAssistant(id: string): Promise<Assistant> {
+  const res = await fetch(`${API_BASE_URL}/assistants/${id}`, { cache: 'no-store' });
   if (!res.ok) {
-    throw new Error(`Failed to fetch provider config for ${providerId} (${res.status})`);
+    throw new Error(`Failed to fetch assistant ${id} (${res.status})`);
   }
   return res.json();
 }
 
-export async function saveProviderConfigApi(
-  providerId: string,
-  payload: SaveProviderConfigPayload
-): Promise<ProviderConfigDto> {
-  const res = await fetch(`${API_BASE_URL}/providers/config/${providerId}`, {
+export async function createAssistantApi(payload: AssistantCreatePayload): Promise<Assistant> {
+  const res = await fetch(`${API_BASE_URL}/assistants`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to create assistant (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function updateAssistantApi(
+  id: string,
+  payload: AssistantUpdatePayload
+): Promise<Assistant> {
+  const res = await fetch(`${API_BASE_URL}/assistants/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    throw new Error(`Failed to save provider config for ${providerId} (${res.status})`);
+    throw new Error(`Failed to update assistant ${id} (${res.status})`);
   }
   return res.json();
+}
+
+export async function deleteAssistantApi(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/assistants/${id}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to delete assistant ${id} (${res.status})`);
+  }
 }

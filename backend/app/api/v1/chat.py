@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import SessionLocal, get_db
 from app.core.security import decrypt_api_key
-from app.models.entities import ProviderConfig
+from app.models.entities import Assistant
 from app.providers.llm.base import (
     ChatMessage,
     MessageRole,
@@ -53,11 +53,14 @@ class ChatRequest(BaseModel):
         default_factory=list, description="Conversation history messages"
     )
     provider_name: str = Field(default="openai", description="Model provider identifier")
-    model_name: str = Field(default="gpt-4o", description="Target model version identifier")
+    model_name: str = Field(default="", description="Target model version identifier")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
     max_tokens: int | None = Field(default=None, description="Max completion tokens limit")
     system_instruction: str | None = Field(default=None, description="System prompt instructions")
     session_id: str | None = Field(default=None, description="Optional session ID for persistence")
+    assistant_id: str | None = Field(
+        default=None, description="Optional target assistant identifier"
+    )
     api_key: str | None = Field(default=None, description="Optional client API key")
     base_url: str | None = Field(default=None, description="Optional custom base URL endpoint")
 
@@ -107,7 +110,7 @@ def _get_provider(
     """
     config = ModelConfig(
         provider_id=provider_name,
-        model_name=model_name or "gpt-4o",
+        model_name=model_name,
         temperature=temperature,
         max_tokens=max_tokens,
         system_prompt=system_instruction,
@@ -126,10 +129,10 @@ class ProviderModelsResponse(BaseModel):
 
 @router.get("/models", response_model=list[ProviderModelsResponse], status_code=status.HTTP_200_OK)
 async def list_available_models() -> list[ProviderModelsResponse]:
-    """Endpoint listing all supported providers and their dynamically fetched models.
+    """Endpoint listing all supported providers with empty model catalogs.
 
     Returns:
-        list[ProviderModelsResponse]: List of provider model availability objects.
+        list[ProviderModelsResponse]: List of provider objects with empty model lists.
     """
     supported_providers = [
         "openai",
@@ -139,19 +142,11 @@ async def list_available_models() -> list[ProviderModelsResponse]:
         "groq",
         "openrouter",
     ]
-    result: list[ProviderModelsResponse] = []
-
-    for provider_name in supported_providers:
-        provider_obj = _get_provider(provider_name)
-        models_list = await provider_obj.list_models()
-        result.append(
-            ProviderModelsResponse(
-                provider_name=provider_name,
-                models=models_list,
-            )
-        )
-
-    return result
+    # [No Predefined Models] Catalogs start empty; users register model IDs on each assistant
+    return [
+        ProviderModelsResponse(provider_name=provider_name, models=[])
+        for provider_name in supported_providers
+    ]
 
 
 def _prepare_messages_context(
@@ -202,19 +197,34 @@ def _resolve_provider_credentials(
     base_url = request.base_url
     system_instruction = request.system_instruction
 
-    # [Database Fallback] If credentials not provided in request, check database ProviderConfig
-    stored_cfg = (
-        db.query(ProviderConfig)
-        .filter(ProviderConfig.provider_id == request.provider_name.lower().strip())
-        .first()
-    )
-    if stored_cfg:
-        if not api_key and stored_cfg.api_key_encrypted:
-            api_key = decrypt_api_key(stored_cfg.api_key_encrypted)
-        if not base_url and stored_cfg.base_url:
-            base_url = stored_cfg.base_url
-        if not system_instruction and stored_cfg.system_prompt:
-            system_instruction = stored_cfg.system_prompt
+    # [Assistant Override] If assistant_id provided, adopt assistant's persona and model configuration
+    if request.assistant_id:
+        assistant = db.query(Assistant).filter(Assistant.id == request.assistant_id).first()
+        if assistant:
+            if not system_instruction and assistant.system_prompt:
+                system_instruction = assistant.system_prompt
+            if not request.provider_name or request.provider_name == "openai":
+                request.provider_name = assistant.provider_id
+            if not request.model_name:
+                request.model_name = assistant.model_name
+            if not api_key and assistant.api_key_encrypted:
+                api_key = decrypt_api_key(assistant.api_key_encrypted)
+            if not base_url and assistant.base_url:
+                base_url = assistant.base_url
+    elif request.provider_name:
+        # [Fallback to Provider Match] Check if an assistant matches the requested provider
+        matched_ast = (
+            db.query(Assistant)
+            .filter(Assistant.provider_id == request.provider_name.lower().strip())
+            .first()
+        )
+        if matched_ast:
+            if not api_key and matched_ast.api_key_encrypted:
+                api_key = decrypt_api_key(matched_ast.api_key_encrypted)
+            if not base_url and matched_ast.base_url:
+                base_url = matched_ast.base_url
+            if not system_instruction and matched_ast.system_prompt:
+                system_instruction = matched_ast.system_prompt
 
     return api_key, base_url, system_instruction
 

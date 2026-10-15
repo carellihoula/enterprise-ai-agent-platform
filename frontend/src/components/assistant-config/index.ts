@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./ConfigHeader";
+export * from "./AssistantIdentityEditor";
 export * from "./ProviderSelector";
 export * from "./ProviderCredentials";
 export * from "./ModelListManager";

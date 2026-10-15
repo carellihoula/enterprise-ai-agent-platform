@@ -65,7 +65,7 @@ class LangChainModelProvider(ModelProvider):
             from langchain_openai import ChatOpenAI
 
             openai_kwargs: dict[str, Any] = {
-                "model": config.model_name or "llama3",
+                "model": config.model_name,
                 "api_key": api_key_secret or SecretStr("local-key"),
                 "base_url": config.base_url or "http://localhost:11434/v1",
                 "temperature": config.temperature,
@@ -81,7 +81,7 @@ class LangChainModelProvider(ModelProvider):
             from langchain_openai import ChatOpenAI
 
             openrouter_kwargs: dict[str, Any] = {
-                "model": config.model_name or "meta-llama/llama-3-8b-instruct:free",
+                "model": config.model_name,
                 "api_key": api_key_secret or SecretStr("openrouter-key"),
                 "base_url": config.base_url or "https://openrouter.ai/api/v1",
                 "temperature": config.temperature,
@@ -97,7 +97,7 @@ class LangChainModelProvider(ModelProvider):
             from langchain_groq import ChatGroq
 
             groq_kwargs: dict[str, Any] = {
-                "model": config.model_name or "llama-3.3-70b-versatile",
+                "model": config.model_name,
                 "temperature": config.temperature,
                 **config.provider_params,
             }
@@ -115,7 +115,7 @@ class LangChainModelProvider(ModelProvider):
             from langchain_mistralai import ChatMistralAI
 
             mistral_kwargs: dict[str, Any] = {
-                "model": config.model_name or "mistral-large-latest",
+                "model": config.model_name,
                 "temperature": config.temperature,
                 **config.provider_params,
             }
@@ -407,8 +407,12 @@ class LangChainModelProvider(ModelProvider):
         )
 
     async def list_models(self) -> list[str]:
-        """Returns available models for the provider."""
-        return [self.config.model_name]
+        """Returns available models for the provider.
+
+        Returns:
+            list[str]: The user-configured model identifier, or an empty list if none is set.
+        """
+        return [self.config.model_name] if self.config.model_name else []
 
     async def health(self) -> ProviderHealth:
         """Checks connectivity health for the provider."""

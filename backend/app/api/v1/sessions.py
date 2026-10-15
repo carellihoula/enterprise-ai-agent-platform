@@ -22,9 +22,13 @@ class CreateSessionRequest(BaseModel):
 
     Attributes:
         title (str | None): Optional title for the conversation session.
+        assistant_id (str | None): Optional associated assistant identifier.
     """
 
     title: str | None = Field(default=None, description="Optional conversation session title")
+    assistant_id: str | None = Field(
+        default=None, description="Optional associated assistant identifier"
+    )
 
 
 class SessionMessageResponse(BaseModel):
@@ -51,12 +55,14 @@ class SessionResponse(BaseModel):
     Attributes:
         id (str): Unique UUID string identifier of the session.
         title (str): Title or summary of the conversation session.
+        assistant_id (str | None): Associated assistant identifier.
         created_at (datetime): Timestamp when session was created.
         updated_at (datetime): Timestamp when session was last updated.
     """
 
     id: str = Field(description="Unique session identifier")
     title: str = Field(description="Session title")
+    assistant_id: str | None = Field(default=None, description="Associated assistant identifier")
     created_at: datetime = Field(description="Timestamp when session was created")
     updated_at: datetime = Field(description="Timestamp when session was last updated")
 
@@ -89,10 +95,11 @@ async def create_session(
     """
     service = SessionService(db)
     # [Persistence] Delegate session creation to service layer
-    session = service.create_session(title=request.title)
+    session = service.create_session(title=request.title, assistant_id=request.assistant_id)
     return SessionResponse(
         id=session.id,
         title=session.title,
+        assistant_id=session.assistant_id,
         created_at=session.created_at,
         updated_at=session.updated_at,
     )
@@ -117,6 +124,7 @@ async def list_sessions(
         SessionResponse(
             id=s.id,
             title=s.title,
+            assistant_id=s.assistant_id,
             created_at=s.created_at,
             updated_at=s.updated_at,
         )
@@ -147,6 +155,7 @@ async def get_session(
     return SessionDetailResponse(
         id=session.id,
         title=session.title,
+        assistant_id=session.assistant_id,
         created_at=session.created_at,
         updated_at=session.updated_at,
         messages=[

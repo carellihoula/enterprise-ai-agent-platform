@@ -3,7 +3,7 @@
 /**
  * Enterprise AI Agent Platform - Main Application Shell.
  * Orchestrator integrating global Header, Sidebar, Command Palette,
- * Dashboard, and the conversational Agent Playground.
+ * Dashboard, Multi-Assistant Catalog, and the conversational Agent Playground.
  */
 
 import React, { useState, useEffect } from "react";
@@ -16,8 +16,10 @@ import { AssistantConfigView } from "@/components/AssistantConfigView";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { PRESET_PROVIDERS, ModelConfigState } from "@/types/chat";
-import { fetchProviderConfigs } from "@/lib/api";
+import { Assistant } from "@/types/assistant";
 import { useChatSession } from "@/hooks/useChatSession";
+import { useAssistants } from "@/hooks/useAssistants";
+import { AssistantsListView, AssistantPickerModal } from "@/components/assistants";
 import {
   EngineSubBar,
   ChatPlaygroundView,
@@ -29,6 +31,7 @@ export default function EnterpriseAppPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [isAssistantPickerOpen, setIsAssistantPickerOpen] = useState(false);
   const [chatViewMode, setChatViewMode] = useState<"playground" | "config">("playground");
 
   const [modelConfig, setModelConfig] = useState<ModelConfigState>({
@@ -38,36 +41,38 @@ export default function EnterpriseAppPage() {
     availableModels: [],
   });
 
-  useEffect(() => {
-    async function loadActiveConfigFromDb() {
-      try {
-        const configs = await fetchProviderConfigs();
-        if (configs && configs.length > 0) {
-          const activeProvId =
-            typeof window !== "undefined"
-              ? localStorage.getItem("active_provider_id") || "gemini"
-              : "gemini";
-          const match =
-            configs.find((c) => c.provider_id === activeProvId) || configs[0];
-          if (match) {
-            setModelConfig({
-              providerId: match.provider_id,
-              modelName: match.active_model || (match.models.length > 0 ? match.models[0] : ""),
-              temperature: match.temperature ?? 0.7,
-              systemPrompt: match.system_prompt || "",
-              availableModels: match.models || [],
-              baseUrl: match.base_url || undefined,
-            });
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load initial provider configs from DB", err);
-      }
-    }
-    loadActiveConfigFromDb();
+  // [Multi-Assistant] Hook managing custom AI assistants
+  const handleSyncModelConfig = React.useCallback((cfg: Partial<ModelConfigState>) => {
+    setModelConfig((prev) => ({
+      ...prev,
+      ...cfg,
+    }));
   }, []);
 
-  const handleOpenConfig = () => {
+  const {
+    assistants,
+    activeAssistant,
+    assistantToEdit,
+    setAssistantToEdit,
+    isLoading: isLoadingAssistants,
+    selectAssistant,
+    selectAssistantById,
+    createAssistant,
+    updateAssistant,
+    deleteAssistant,
+  } = useAssistants({
+    onSyncModelConfig: handleSyncModelConfig,
+  });
+
+
+  const handleOpenConfigForNew = () => {
+    setAssistantToEdit(null);
+    setActiveTab("chat");
+    setChatViewMode("config");
+  };
+
+  const handleOpenConfigForEdit = (assistant: Assistant) => {
+    setAssistantToEdit(assistant);
     setActiveTab("chat");
     setChatViewMode("config");
   };
@@ -101,11 +106,22 @@ export default function EnterpriseAppPage() {
     handleRetryLastMessage,
   } = useChatSession({
     modelConfig,
+    activeAssistantId: activeAssistant?.id,
     onSessionSelected: () => {
       setActiveTab("chat");
       setChatViewMode("playground");
     },
+    onAssistantMatched: (matchedAssistantId) => {
+      selectAssistantById(matchedAssistantId);
+    },
   });
+
+  const handleChatWithAssistant = (assistant: Assistant) => {
+    selectAssistant(assistant);
+    setActiveTab("chat");
+    setChatViewMode("playground");
+    handleNewSession(`Chat with ${assistant.name}`, assistant.id);
+  };
 
   // Keyboard shortcut listener for Command Palette (⌘K / Ctrl+K)
   useEffect(() => {
@@ -119,25 +135,6 @@ export default function EnterpriseAppPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Load saved hyperparameters & provider settings from localStorage on mount
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedProv = localStorage.getItem("active_provider_id");
-      const savedModel = localStorage.getItem("active_model_name");
-      const savedTemp = localStorage.getItem("active_temperature");
-      const savedSys = localStorage.getItem("active_system_prompt");
-      if (savedProv || savedModel || savedTemp) {
-        setModelConfig((prev) => ({
-          ...prev,
-          providerId: savedProv || prev.providerId,
-          modelName: savedModel || prev.modelName,
-          temperature: savedTemp ? Math.min(parseFloat(savedTemp), 1.0) : prev.temperature,
-          systemPrompt: savedSys ?? prev.systemPrompt,
-        }));
-      }
-    }
-  }, []);
-
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white text-zinc-900 font-sans">
       {isSidebarOpen && (
@@ -147,10 +144,10 @@ export default function EnterpriseAppPage() {
           sessions={sessions}
           currentSessionId={currentSessionId}
           onSelectSession={handleSelectSession}
-          onNewSession={handleNewSession}
+          onNewSession={() => handleNewSession("New Conversation", activeAssistant?.id)}
           onDeleteSession={handleDeleteSession}
           isLoadingSessions={isLoadingSessions}
-          onOpenSettings={handleOpenConfig}
+          onOpenSettings={handleOpenConfigForNew}
         />
       )}
 
@@ -159,7 +156,7 @@ export default function EnterpriseAppPage() {
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-          onOpenSettings={handleOpenConfig}
+          onOpenSettings={handleOpenConfigForNew}
           onOpenAgentBuilder={() => setActiveTab("agents")}
           modelConfig={modelConfig}
         />
@@ -185,18 +182,20 @@ export default function EnterpriseAppPage() {
           <DashboardView
             onNavigate={(tab) => setActiveTab(tab)}
             onOpenAgentBuilder={() => setActiveTab("agents")}
-            onOpenSettings={handleOpenConfig}
+            onOpenSettings={handleOpenConfigForNew}
             onLaunchAgentChat={() => {
               setActiveTab("chat");
-              handleNewSession();
+              setChatViewMode("playground");
+              handleNewSession("New Conversation", activeAssistant?.id);
             }}
           />
         </div>
 
-        {/* 2. Interactive Chat Playground View */}
+        {/* 2. Interactive Chat Playground / Assistant Config View */}
         <div className={activeTab === "chat" ? "flex-1 flex flex-col h-full overflow-hidden bg-white" : "hidden"}>
           <EngineSubBar
             modelConfig={modelConfig}
+            activeAssistant={activeAssistant}
             chatViewMode={chatViewMode}
             onToggleViewMode={() =>
               setChatViewMode(chatViewMode === "config" ? "playground" : "config")
@@ -206,8 +205,11 @@ export default function EnterpriseAppPage() {
           {chatViewMode === "config" ? (
             <AssistantConfigView
               config={modelConfig}
+              assistantToEdit={assistantToEdit}
               onSaveConfig={handleUpdateModelConfig}
               onNavigateToPlayground={() => setChatViewMode("playground")}
+              onCreateAssistant={createAssistant}
+              onUpdateAssistant={updateAssistant}
             />
           ) : (
             <ChatPlaygroundView
@@ -217,12 +219,28 @@ export default function EnterpriseAppPage() {
               onSendMessage={handleSendMessage}
               onStopStreaming={handleStopStreaming}
               onRetryLastMessage={handleRetryLastMessage}
+              onOpenAssistantPicker={() => setIsAssistantPickerOpen(true)}
+              activeAssistantName={activeAssistant?.name}
             />
           )}
         </div>
 
-        {/* 3. Placeholder Views for Other Modules */}
-        {activeTab !== "home" && activeTab !== "chat" && (
+        {/* 3. Assistants Catalog View */}
+        <div className={activeTab === "agents" ? "flex-1 flex flex-col h-full overflow-hidden" : "hidden"}>
+          <AssistantsListView
+            assistants={assistants}
+            activeAssistantId={activeAssistant?.id}
+            onSelectAssistant={selectAssistant}
+            onCreateAssistant={handleOpenConfigForNew}
+            onEditAssistant={handleOpenConfigForEdit}
+            onDeleteAssistant={deleteAssistant}
+            onChatWithAssistant={handleChatWithAssistant}
+            isLoading={isLoadingAssistants}
+          />
+        </div>
+
+        {/* 4. Placeholder Views for Other Modules */}
+        {activeTab !== "home" && activeTab !== "chat" && activeTab !== "agents" && (
           <ModulePlaceholderView
             activeTab={activeTab}
             onNavigateHome={() => setActiveTab("home")}
@@ -235,7 +253,7 @@ export default function EnterpriseAppPage() {
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
         onNavigate={(tab) => setActiveTab(tab as NavTabId)}
-        onOpenSettings={handleOpenConfig}
+        onOpenSettings={handleOpenConfigForNew}
         onOpenAgentBuilder={() => setActiveTab("agents")}
       />
 
@@ -244,6 +262,18 @@ export default function EnterpriseAppPage() {
         onClose={() => setIsApiKeyModalOpen(false)}
         config={modelConfig}
         onSaveConfig={setModelConfig}
+      />
+
+      <AssistantPickerModal
+        isOpen={isAssistantPickerOpen}
+        onClose={() => setIsAssistantPickerOpen(false)}
+        assistants={assistants}
+        activeAssistantId={activeAssistant?.id}
+        onSelectAssistant={(assistant) => {
+          selectAssistant(assistant);
+          setIsAssistantPickerOpen(false);
+        }}
+        onCreateNewAssistant={handleOpenConfigForNew}
       />
     </div>
   );

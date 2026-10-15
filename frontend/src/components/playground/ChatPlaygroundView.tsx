@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import { Message, ModelConfigState } from "@/types/chat";
+import { Message } from "@/types/chat";
 import { ChatMessageItem } from "@/components/ChatMessageItem";
 import { ChatInput } from "@/components/ChatInput";
 import { Sparkles } from "lucide-react";
@@ -12,6 +12,8 @@ interface ChatPlaygroundViewProps {
   onSendMessage: (content: string) => void;
   onStopStreaming: () => void;
   onRetryLastMessage: () => void;
+  onOpenAssistantPicker?: () => void;
+  activeAssistantName?: string;
 }
 
 /**
@@ -24,6 +26,8 @@ export const ChatPlaygroundView: React.FC<ChatPlaygroundViewProps> = ({
   onSendMessage,
   onStopStreaming,
   onRetryLastMessage,
+  onOpenAssistantPicker,
+  activeAssistantName,
 }) => {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUpRef = useRef<boolean>(false);
@@ -84,6 +88,8 @@ export const ChatPlaygroundView: React.FC<ChatPlaygroundViewProps> = ({
         onSendMessage={onSendMessage}
         isLoading={isStreaming}
         onStopStreaming={onStopStreaming}
+        onOpenAssistantPicker={onOpenAssistantPicker}
+        activeAssistantName={activeAssistantName}
       />
     </>
   );
