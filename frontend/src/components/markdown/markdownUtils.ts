@@ -22,10 +22,13 @@ export function processStreamingCodeBlocks(
     const unclosedPart = parts[parts.length - 1];
     const firstNewlineIndex = unclosedPart.indexOf("\n");
     let lang = "code";
+    let body = "";
     if (firstNewlineIndex !== -1) {
       lang = unclosedPart.slice(0, firstNewlineIndex).trim() || "code";
+      body = unclosedPart.slice(firstNewlineIndex + 1);
     } else {
       lang = unclosedPart.trim() || "code";
+      body = "";
     }
 
     const closedParts = parts.slice(0, parts.length - 1);
@@ -34,8 +37,8 @@ export function processStreamingCodeBlocks(
       closedParts.join(fence) +
       fence +
       lang +
-      "\n" +
-      STREAMING_PLACEHOLDER +
+      " is-streaming\n" +
+      body +
       "\n" +
       fence
     );

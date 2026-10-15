@@ -117,7 +117,11 @@ const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
               </code>
             );
           },
-          pre: ({ children }) => <CodePreBlock>{children}</CodePreBlock>,
+          pre: ({ children, node, ...props }) => (
+            <CodePreBlock node={node} {...props}>
+              {children}
+            </CodePreBlock>
+          ),
         }}
       >
         {processedContent}

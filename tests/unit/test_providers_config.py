@@ -85,3 +85,39 @@ def test_save_and_get_provider_config() -> None:
         db.query(ProviderConfig).filter(ProviderConfig.provider_id == "test_provider").delete()
         db.commit()
         db.close()
+
+
+def test_mistral_groq_openrouter_adapters() -> None:
+    """Validates that Mistral, Groq, and OpenRouter model adapters initialize properly."""
+    from app.providers.llm.base import ModelConfig
+    from app.providers.llm.langchain_provider import ProviderAdapterRegistry
+
+    # [Mistral Integration] Test langchain-mistralai adapter instantiation
+    mistral_cfg = ModelConfig(
+        provider_id="mistral",
+        model_name="mistral-small-latest",
+        api_key="mock-mistral-key",
+    )
+    mistral_provider = ProviderAdapterRegistry.get_provider(mistral_cfg)
+    assert mistral_provider is not None
+    assert mistral_provider.get_model_info().provider_name == "mistral"
+
+    # [Groq Integration] Test langchain-groq adapter instantiation
+    groq_cfg = ModelConfig(
+        provider_id="groq",
+        model_name="llama-3.3-70b-versatile",
+        api_key="gsk_mock_groq_key",
+    )
+    groq_provider = ProviderAdapterRegistry.get_provider(groq_cfg)
+    assert groq_provider is not None
+    assert groq_provider.get_model_info().provider_name == "groq"
+
+    # [OpenRouter Integration] Test OpenRouter gateway adapter instantiation
+    openrouter_cfg = ModelConfig(
+        provider_id="openrouter",
+        model_name="meta-llama/llama-3-8b-instruct:free",
+        api_key="sk-or-v1-mock-key",
+    )
+    openrouter_provider = ProviderAdapterRegistry.get_provider(openrouter_cfg)
+    assert openrouter_provider is not None
+    assert openrouter_provider.get_model_info().provider_name == "openrouter"

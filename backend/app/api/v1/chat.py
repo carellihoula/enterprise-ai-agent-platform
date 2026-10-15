@@ -131,7 +131,14 @@ async def list_available_models() -> list[ProviderModelsResponse]:
     Returns:
         list[ProviderModelsResponse]: List of provider model availability objects.
     """
-    supported_providers = ["openai", "anthropic", "gemini"]
+    supported_providers = [
+        "openai",
+        "anthropic",
+        "gemini",
+        "mistral",
+        "groq",
+        "openrouter",
+    ]
     result: list[ProviderModelsResponse] = []
 
     for provider_name in supported_providers:

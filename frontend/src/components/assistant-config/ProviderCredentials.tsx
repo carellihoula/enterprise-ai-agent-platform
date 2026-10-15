@@ -5,18 +5,41 @@ import { ProviderDefinition } from "./types";
 
 interface ProviderCredentialsProps {
   currentProviderDef: ProviderDefinition;
-  apiKeyGemini: string;
-  setApiKeyGemini: (val: string) => void;
-  apiKeyOpenai: string;
-  setApiKeyOpenai: (val: string) => void;
-  apiKeyAnthropic: string;
-  setApiKeyAnthropic: (val: string) => void;
-  apiKeyCustom: string;
-  setApiKeyCustom: (val: string) => void;
-  baseUrlCustom: string;
-  setBaseUrlCustom: (val: string) => void;
+  apiKey: string;
+  setApiKey: (val: string) => void;
+  baseUrl?: string;
+  setBaseUrl?: (val: string) => void;
   maskedKey?: string;
   hasApiKey?: boolean;
+}
+
+/**
+ * Returns a recognizable API key placeholder according to the selected provider.
+ */
+function getApiKeyPlaceholder(
+  providerId: string,
+  hasApiKey: boolean,
+  maskedKey?: string,
+): string {
+  if (hasApiKey) {
+    return `•••••••• (${maskedKey || "Key encrypted in database"})`;
+  }
+  switch (providerId) {
+    case "gemini":
+      return "AIzaSy...";
+    case "openai":
+      return "sk-proj-...";
+    case "anthropic":
+      return "sk-ant-...";
+    case "mistral":
+      return "mistral-api-key...";
+    case "groq":
+      return "gsk_...";
+    case "openrouter":
+      return "sk-or-v1-...";
+    default:
+      return "sk-... (Optional for local Ollama, required for hosted gateways)";
+  }
 }
 
 /**
@@ -25,19 +48,16 @@ interface ProviderCredentialsProps {
  */
 export const ProviderCredentials: React.FC<ProviderCredentialsProps> = ({
   currentProviderDef,
-  apiKeyGemini,
-  setApiKeyGemini,
-  apiKeyOpenai,
-  setApiKeyOpenai,
-  apiKeyAnthropic,
-  setApiKeyAnthropic,
-  apiKeyCustom,
-  setApiKeyCustom,
-  baseUrlCustom,
-  setBaseUrlCustom,
+  apiKey,
+  setApiKey,
+  baseUrl = "",
+  setBaseUrl,
   maskedKey,
   hasApiKey = false,
 }) => {
+  const isCustomEndpoint =
+    currentProviderDef.id === "custom" || currentProviderDef.id === "openrouter";
+
   return (
     <div className="p-5 bg-white border border-zinc-200/90 rounded-xl space-y-4 shadow-2xs">
       <div className="flex items-center justify-between pb-3 border-b border-zinc-100 flex-wrap gap-2">
@@ -61,102 +81,50 @@ export const ProviderCredentials: React.FC<ProviderCredentialsProps> = ({
         )}
       </div>
 
-      {currentProviderDef.id === "gemini" && (
-        <div className="space-y-1.5">
-          <Label className="text-[11px] font-mono font-medium text-zinc-700">
-            Google Gemini API Key
-          </Label>
-          <input
-            type="password"
-            placeholder={hasApiKey ? `•••••••• (${maskedKey || "Key encrypted in database"})` : "AIzaSy..."}
-            value={apiKeyGemini}
-            onChange={(e) => setApiKeyGemini(e.target.value)}
-            className="w-full px-3.5 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-2xs"
-          />
-          <p className="text-[11px] text-zinc-400">
-            {hasApiKey
-              ? "Key is stored encrypted in database. Type a new key to update, or leave empty to keep existing."
-              : "API key will be encrypted and saved in your database."}
-          </p>
-        </div>
-      )}
-
-      {currentProviderDef.id === "openai" && (
-        <div className="space-y-1.5">
-          <Label className="text-[11px] font-mono font-medium text-zinc-700">
-            OpenAI API Key
-          </Label>
-          <input
-            type="password"
-            placeholder={hasApiKey ? `•••••••• (${maskedKey || "Key encrypted in database"})` : "sk-proj-..."}
-            value={apiKeyOpenai}
-            onChange={(e) => setApiKeyOpenai(e.target.value)}
-            className="w-full px-3.5 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-2xs"
-          />
-          <p className="text-[11px] text-zinc-400">
-            {hasApiKey
-              ? "Key is stored encrypted in database. Type a new key to update, or leave empty to keep existing."
-              : "API key will be encrypted and saved in your database."}
-          </p>
-        </div>
-      )}
-
-      {currentProviderDef.id === "anthropic" && (
-        <div className="space-y-1.5">
-          <Label className="text-[11px] font-mono font-medium text-zinc-700">
-            Anthropic Claude API Key
-          </Label>
-          <input
-            type="password"
-            placeholder={hasApiKey ? `•••••••• (${maskedKey || "Key encrypted in database"})` : "sk-ant-..."}
-            value={apiKeyAnthropic}
-            onChange={(e) => setApiKeyAnthropic(e.target.value)}
-            className="w-full px-3.5 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-2xs"
-          />
-          <p className="text-[11px] text-zinc-400">
-            {hasApiKey
-              ? "Key is stored encrypted in database. Type a new key to update, or leave empty to keep existing."
-              : "API key will be encrypted and saved in your database."}
-          </p>
-        </div>
-      )}
-
-      {currentProviderDef.id === "custom" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className={isCustomEndpoint ? "grid grid-cols-1 md:grid-cols-2 gap-4" : "space-y-1.5"}>
+        {isCustomEndpoint && setBaseUrl && (
           <div className="space-y-1.5">
             <Label className="text-[11px] font-mono font-medium text-zinc-700 flex items-center gap-1.5">
               <Link className="w-3 h-3 text-emerald-500" />
-              <span>OpenAI-Compatible Base URL</span>
+              <span>Base URL Endpoint</span>
             </Label>
             <input
               type="text"
-              placeholder="http://localhost:11434/v1 or https://api.groq.com/openai/v1"
-              value={baseUrlCustom}
-              onChange={(e) => setBaseUrlCustom(e.target.value)}
+              placeholder={
+                currentProviderDef.id === "openrouter"
+                  ? "https://openrouter.ai/api/v1"
+                  : "http://localhost:11434/v1"
+              }
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
               className="w-full px-3.5 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-2xs"
             />
             <p className="text-[11px] text-zinc-400">
-              Examples: Ollama (`http://localhost:11434/v1`), vLLM, Groq, OpenRouter.
+              {currentProviderDef.id === "openrouter"
+                ? "Default: https://openrouter.ai/api/v1"
+                : "Examples: Ollama (http://localhost:11434/v1), vLLM, or custom proxy."}
             </p>
           </div>
+        )}
 
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-mono font-medium text-zinc-700">
-              Custom Provider API Key (optional)
-            </Label>
-            <input
-              type="password"
-              placeholder={hasApiKey ? `•••••••• (${maskedKey || "Key encrypted in database"})` : "gsk_... or custom gateway token"}
-              value={apiKeyCustom}
-              onChange={(e) => setApiKeyCustom(e.target.value)}
-              className="w-full px-3.5 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-2xs"
-            />
-            <p className="text-[11px] text-zinc-400">
-              Optional for local Ollama, required for hosted gateways like Groq or OpenRouter.
-            </p>
-          </div>
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-mono font-medium text-zinc-700">
+            {currentProviderDef.name} API Key
+          </Label>
+          <input
+            type="password"
+            placeholder={getApiKeyPlaceholder(currentProviderDef.id, hasApiKey, maskedKey)}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            className="w-full px-3.5 py-2 text-xs font-mono bg-white border border-zinc-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-2xs"
+          />
+          <p className="text-[11px] text-zinc-400">
+            {hasApiKey
+              ? "Key is stored encrypted in database. Type a new key to update, or leave empty to keep existing."
+              : "API key will be encrypted and saved in your database."}
+          </p>
         </div>
-      )}
+      </div>
     </div>
   );
 };

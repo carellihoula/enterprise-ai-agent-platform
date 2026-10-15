@@ -29,11 +29,11 @@ export function useAssistantConfig({
     config.systemPrompt || "",
   );
 
-  const [apiKeyGemini, setApiKeyGemini] = useState<string>("");
-  const [apiKeyOpenai, setApiKeyOpenai] = useState<string>("");
-  const [apiKeyAnthropic, setApiKeyAnthropic] = useState<string>("");
-  const [apiKeyCustom, setApiKeyCustom] = useState<string>("");
-  const [baseUrlCustom, setBaseUrlCustom] = useState<string>("http://localhost:11434/v1");
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+  const [baseUrls, setBaseUrls] = useState<Record<string, string>>({
+    custom: "http://localhost:11434/v1",
+    openrouter: "https://openrouter.ai/api/v1",
+  });
 
   const [maskedKeys, setMaskedKeys] = useState<Record<string, string>>({});
   const [hasApiKeys, setHasApiKeys] = useState<Record<string, boolean>>({});
@@ -52,6 +52,10 @@ export function useAssistantConfig({
         const loadedModels: Record<string, string[]> = {};
         const loadedMasked: Record<string, string> = {};
         const loadedHasKey: Record<string, boolean> = {};
+        const loadedUrls: Record<string, string> = {
+          custom: "http://localhost:11434/v1",
+          openrouter: "https://openrouter.ai/api/v1",
+        };
 
         // [Defaults] Initialize all supported providers as empty model lists
         SUPPORTED_PROVIDERS.forEach((prov) => {
@@ -65,18 +69,21 @@ export function useAssistantConfig({
             loadedMasked[cfg.provider_id] = cfg.masked_api_key;
           }
           loadedHasKey[cfg.provider_id] = cfg.has_api_key;
+          if (cfg.base_url) {
+            loadedUrls[cfg.provider_id] = cfg.base_url;
+          }
 
           if (cfg.provider_id === selectedProviderId) {
             if (cfg.active_model) setActiveModel(cfg.active_model);
             if (cfg.temperature !== undefined) setTemperature(cfg.temperature);
             if (cfg.system_prompt !== undefined) setSystemPrompt(cfg.system_prompt || "");
-            if (cfg.base_url) setBaseUrlCustom(cfg.base_url);
           }
         });
 
         setProviderModels(loadedModels);
         setMaskedKeys(loadedMasked);
         setHasApiKeys(loadedHasKey);
+        setBaseUrls(loadedUrls);
 
         const currentList = loadedModels[selectedProviderId] || [];
         if (currentList.length > 0 && !currentList.includes(config.modelName)) {
@@ -138,13 +145,27 @@ export function useAssistantConfig({
     setActiveModel("");
   };
 
+  const currentApiKey = apiKeys[selectedProviderId] || "";
+  const setCurrentApiKey = (val: string) =>
+    setApiKeys((prev) => ({ ...prev, [selectedProviderId]: val }));
+
+  const currentBaseUrl =
+    baseUrls[selectedProviderId] ||
+    (selectedProviderId === "openrouter"
+      ? "https://openrouter.ai/api/v1"
+      : "http://localhost:11434/v1");
+  const setCurrentBaseUrl = (val: string) =>
+    setBaseUrls((prev) => ({ ...prev, [selectedProviderId]: val }));
+
   const handleSaveAll = async () => {
     // [Credentials Mapping] Determine if user input a fresh API key to encrypt
-    let keyInput: string | undefined = undefined;
-    if (selectedProviderId === "gemini" && apiKeyGemini) keyInput = apiKeyGemini.trim();
-    else if (selectedProviderId === "openai" && apiKeyOpenai) keyInput = apiKeyOpenai.trim();
-    else if (selectedProviderId === "anthropic" && apiKeyAnthropic) keyInput = apiKeyAnthropic.trim();
-    else if (selectedProviderId === "custom" && apiKeyCustom) keyInput = apiKeyCustom.trim();
+    const rawKey = apiKeys[selectedProviderId];
+    const keyInput = rawKey && rawKey.trim().length > 0 ? rawKey.trim() : undefined;
+    const isCustomUrlProvider =
+      selectedProviderId === "custom" || selectedProviderId === "openrouter";
+    const baseUrlInput = isCustomUrlProvider
+      ? baseUrls[selectedProviderId]?.trim()
+      : undefined;
 
     try {
       const saved = await saveProviderConfigApi(selectedProviderId, {
@@ -153,7 +174,7 @@ export function useAssistantConfig({
         temperature: Math.min(Math.max(temperature, 0), 1.0),
         system_prompt: systemPrompt.trim(),
         api_key: keyInput,
-        base_url: selectedProviderId === "custom" ? baseUrlCustom.trim() : undefined,
+        base_url: baseUrlInput,
       });
 
       if (saved.masked_api_key) {
@@ -169,7 +190,7 @@ export function useAssistantConfig({
       modelName: activeModel || currentModelList[0] || "",
       temperature: Math.min(Math.max(temperature, 0), 1.0),
       systemPrompt: systemPrompt.trim(),
-      baseUrl: selectedProviderId === "custom" ? baseUrlCustom.trim() : undefined,
+      baseUrl: baseUrlInput,
       availableModels: currentModelList,
     };
 
@@ -188,11 +209,10 @@ export function useAssistantConfig({
     activeModel,
     temperature,
     systemPrompt,
-    apiKeyGemini,
-    apiKeyOpenai,
-    apiKeyAnthropic,
-    apiKeyCustom,
-    baseUrlCustom,
+    currentApiKey,
+    setCurrentApiKey,
+    currentBaseUrl,
+    setCurrentBaseUrl,
     maskedKeys,
     hasApiKeys,
     currentProviderDef,
@@ -202,11 +222,6 @@ export function useAssistantConfig({
     isLoading,
     setTemperature,
     setSystemPrompt,
-    setApiKeyGemini,
-    setApiKeyOpenai,
-    setApiKeyAnthropic,
-    setApiKeyCustom,
-    setBaseUrlCustom,
     setNewModelInput,
     setActiveModel,
     handleSelectProvider,

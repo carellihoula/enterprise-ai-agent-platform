@@ -1,6 +1,6 @@
 import React from "react";
 import { Label } from "@/components/ui/label";
-import { Server, Sparkles, Cpu } from "lucide-react";
+import { Server, Sparkles, Cpu, Zap, Flame, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProviderDefinition, SUPPORTED_PROVIDERS } from "./types";
 
@@ -28,7 +28,7 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {SUPPORTED_PROVIDERS.map((prov) => {
           const isSelected = selectedProviderId === prov.id;
           return (
@@ -37,7 +37,7 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
               type="button"
               onClick={() => onSelectProvider(prov.id)}
               className={cn(
-                "flex flex-col text-left p-4 rounded-xl border transition-all relative group bg-white",
+                "flex flex-col text-left p-3.5 rounded-xl border transition-all relative group bg-white",
                 isSelected
                   ? "border-emerald-500 bg-emerald-500/[0.03] ring-1 ring-emerald-500/30 shadow-xs"
                   : "border-zinc-200/90 hover:border-zinc-300 hover:shadow-xs",
@@ -57,6 +57,12 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
                       <Server className="w-4 h-4" />
                     ) : prov.id === "gemini" ? (
                       <Sparkles className="w-4 h-4" />
+                    ) : prov.id === "groq" ? (
+                      <Zap className="w-4 h-4" />
+                    ) : prov.id === "mistral" ? (
+                      <Flame className="w-4 h-4" />
+                    ) : prov.id === "openrouter" ? (
+                      <Globe className="w-4 h-4" />
                     ) : (
                       <Cpu className="w-4 h-4" />
                     )}

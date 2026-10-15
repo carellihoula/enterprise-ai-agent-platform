@@ -1,23 +1,60 @@
-import React, { useState, useRef, useMemo } from "react";
-import { Check, Copy, Loader2, Code2 } from "lucide-react";
-import { STREAMING_PLACEHOLDER } from "./types";
-import { extractTextFromNode } from "./markdownUtils";
+import React, { useState, useRef, useMemo, useEffect } from "react";
+import { Check, Copy, Loader2, Sun, Moon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface CodePreBlockProps {
   children?: React.ReactNode;
+  node?: any;
 }
 
 /**
- * Pre block container with language header, code copy button, and syntax highlighted body.
+ * Pre block container with language header, real-time streaming spinner,
+ * dark / light (GPT grey) theme toggle, and neutral copy button.
  */
-export const CodePreBlock: React.FC<CodePreBlockProps> = ({ children }) => {
+export const CodePreBlock: React.FC<CodePreBlockProps> = ({ children, node }) => {
   const [copied, setCopied] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const preRef = useRef<HTMLPreElement>(null);
 
-  // Extract raw text and language tag to verify if this is an in-flight streaming placeholder
-  const { isStreamingPlaceholder, detectedLang } = useMemo(() => {
-    const rawText = extractTextFromNode(children);
-    const isPlaceholder = rawText.includes(STREAMING_PLACEHOLDER);
+  // [Theme Sync] Read initial code theme from localStorage and sync across all code blocks
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("code_block_theme");
+      if (saved === "light" || saved === "dark") {
+        setTheme(saved);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleThemeChange = (e: Event) => {
+      const customEvent = e as CustomEvent<"dark" | "light">;
+      if (customEvent.detail && customEvent.detail !== theme) {
+        setTheme(customEvent.detail);
+      }
+    };
+    window.addEventListener("code-theme-change", handleThemeChange);
+    return () => window.removeEventListener("code-theme-change", handleThemeChange);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("code_block_theme", nextTheme);
+      window.dispatchEvent(
+        new CustomEvent("code-theme-change", { detail: nextTheme }),
+      );
+    }
+  };
+
+  // Extract language tag and verify whether this code block is actively receiving streamed tokens
+  const { isStreaming, detectedLang } = useMemo(() => {
+    const codeNode = (node as any)?.children?.[0];
+    const isCodeStreaming = Boolean(
+      codeNode?.data?.meta && String(codeNode.data.meta).includes("is-streaming"),
+    );
+
     let lang = "Code";
     try {
       const childArray = React.Children.toArray(children);
@@ -31,8 +68,8 @@ export const CodePreBlock: React.FC<CodePreBlockProps> = ({ children }) => {
     } catch {
       // [Fallback] Default to generic 'Code' label
     }
-    return { isStreamingPlaceholder: isPlaceholder, detectedLang: lang };
-  }, [children]);
+    return { isStreaming: isCodeStreaming, detectedLang: lang };
+  }, [children, node]);
 
   const handleCopy = async () => {
     if (preRef.current) {
@@ -47,63 +84,95 @@ export const CodePreBlock: React.FC<CodePreBlockProps> = ({ children }) => {
     }
   };
 
-  // If currently streaming, display an animated spinner and loading indicator inside the code container
-  if (isStreamingPlaceholder) {
-    return (
-      <div className="relative my-4 rounded-xl overflow-hidden border border-zinc-800 bg-[#0d1117] text-zinc-100 shadow-sm">
-        <div className="flex items-center justify-between px-4 py-2 bg-[#161b22] border-b border-zinc-800 text-xs text-zinc-400 select-none">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-wider font-semibold text-zinc-300">
-              {detectedLang}
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-[11px] text-zinc-300 bg-zinc-800/90 px-2.5 py-0.5 rounded-full border border-zinc-700/60 shadow-xs">
-              <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
-              <span>Generating code...</span>
-            </span>
-          </div>
-        </div>
-        <div className="py-8 px-4 flex flex-col items-center justify-center gap-3 bg-[#0d1117] text-zinc-400 select-none">
-          <div className="flex items-center gap-2 text-xs text-zinc-300 font-medium">
-            <Code2 className="w-4 h-4 text-indigo-400 animate-pulse" />
-            <span>
-              Streaming {detectedLang !== "Code" ? detectedLang : "code"} in
-              real-time...
-            </span>
-          </div>
-          <div className="w-44 h-1.5 bg-zinc-800/80 rounded-full overflow-hidden">
-            <div className="h-full w-2/3 bg-indigo-500 rounded-full animate-pulse" />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const isDark = theme === "dark";
 
   return (
-    <div className="relative my-4 rounded-xl overflow-hidden border border-zinc-800 bg-[#0d1117] text-zinc-100 shadow-sm group">
+    <div
+      className={cn(
+        "relative my-4 rounded-xl overflow-hidden border transition-colors shadow-2xs group",
+        isDark
+          ? "border-zinc-800 bg-[#0d1117] text-zinc-100"
+          : "border-zinc-300/80 bg-[#f4f4f5] text-zinc-900",
+      )}
+    >
       {/* Code Header Bar */}
-      <div className="flex items-center justify-between px-4 py-1.5 bg-[#161b22] border-b border-zinc-800 text-xs text-zinc-400 select-none">
-        <span className="font-mono text-[11px] uppercase tracking-wider font-semibold text-zinc-400">
-          {detectedLang}
-        </span>
-        {/* Copy Button (icon only, neutral styling, no text) */}
-        <button
-          onClick={handleCopy}
-          type="button"
-          title={copied ? "Copied" : "Copy code"}
-          className="flex items-center justify-center text-zinc-400 hover:text-zinc-200 transition-colors h-7 w-7 rounded-lg hover:bg-zinc-800"
-        >
-          {copied ? (
-            <Check className="w-3.5 h-3.5 text-zinc-200" />
-          ) : (
-            <Copy className="w-3.5 h-3.5 text-zinc-400" />
+      <div
+        className={cn(
+          "flex items-center justify-between px-4 py-1.5 border-b text-xs select-none transition-colors",
+          isDark
+            ? "bg-[#161b22] border-zinc-800 text-zinc-400"
+            : "bg-[#e4e4e7] border-zinc-300/80 text-zinc-700",
+        )}
+      >
+        {/* Left: Language Tag & Simple Animated Streaming Spinner */}
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "font-mono text-[11px] uppercase tracking-wider font-semibold",
+              isDark ? "text-zinc-400" : "text-zinc-700",
+            )}
+          >
+            {detectedLang}
+          </span>
+          {isStreaming && (
+            <Loader2
+              className={cn(
+                "w-3.5 h-3.5 animate-spin",
+                isDark ? "text-zinc-400" : "text-zinc-600",
+              )}
+            />
           )}
-        </button>
+        </div>
+
+        {/* Right Action Buttons: Theme Toggle (Dark / Light) & Copy Button */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={toggleTheme}
+            type="button"
+            title={isDark ? "Switch to light theme" : "Switch to dark theme"}
+            className={cn(
+              "flex items-center justify-center transition-colors h-7 w-7 rounded-lg",
+              isDark
+                ? "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                : "text-zinc-600 hover:text-zinc-950 hover:bg-zinc-300/70",
+            )}
+          >
+            {isDark ? (
+              <Sun className="w-3.5 h-3.5" />
+            ) : (
+              <Moon className="w-3.5 h-3.5" />
+            )}
+          </button>
+
+          <button
+            onClick={handleCopy}
+            type="button"
+            title={copied ? "Copied" : "Copy code"}
+            className={cn(
+              "flex items-center justify-center transition-colors h-7 w-7 rounded-lg",
+              isDark
+                ? "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                : "text-zinc-600 hover:text-zinc-950 hover:bg-zinc-300/70",
+            )}
+          >
+            {copied ? (
+              <Check className="w-3.5 h-3.5 text-emerald-500" />
+            ) : (
+              <Copy className="w-3.5 h-3.5" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Highlighted Code Container */}
       <pre
         ref={preRef}
-        className="p-4 overflow-x-auto text-[13px] font-mono leading-relaxed bg-[#0d1117] text-zinc-100 hljs"
+        className={cn(
+          "p-4 overflow-x-auto text-[13px] font-mono leading-relaxed transition-colors",
+          isDark
+            ? "bg-[#0d1117] text-zinc-100 hljs [&_code]:!bg-transparent [&_.hljs]:!bg-transparent"
+            : "!bg-[#f4f4f5] !text-zinc-900 border-t border-zinc-200/80 [&_code]:!bg-transparent [&_.hljs]:!bg-transparent [&_.hljs]:!text-zinc-900 [&_.hljs-keyword]:!text-rose-600 [&_.hljs-keyword]:!font-semibold [&_.hljs-string]:!text-blue-700 [&_.hljs-comment]:!text-zinc-500 [&_.hljs-comment]:!italic [&_.hljs-title]:!text-purple-600 [&_.hljs-number]:!text-blue-600 [&_.hljs-built_in]:!text-amber-700",
+        )}
       >
         {children}
       </pre>

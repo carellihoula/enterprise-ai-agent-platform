@@ -136,15 +136,9 @@ export function useChatSession({
 
     if (typeof window !== "undefined") {
       const prov = modelConfig.providerId.toLowerCase();
-      if (prov === "openai") {
-        apiKey = localStorage.getItem("api_key_openai") || undefined;
-      } else if (prov === "anthropic") {
-        apiKey = localStorage.getItem("api_key_anthropic") || undefined;
-      } else if (prov === "gemini") {
-        apiKey = localStorage.getItem("api_key_gemini") || undefined;
-      } else if (prov === "custom") {
-        apiKey = localStorage.getItem("api_key_custom") || undefined;
-        baseUrl = localStorage.getItem("base_url_custom") || undefined;
+      apiKey = localStorage.getItem(`api_key_${prov}`) || undefined;
+      if (prov === "custom" || prov === "openrouter") {
+        baseUrl = modelConfig.baseUrl || localStorage.getItem(`base_url_${prov}`) || undefined;
       }
     }
 

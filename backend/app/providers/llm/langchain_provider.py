@@ -76,6 +76,58 @@ class LangChainModelProvider(ModelProvider):
 
             return ChatOpenAI(**openai_kwargs)
 
+        # [OpenRouter Provider] Route via OpenAI-compatible endpoint with OpenRouter base URL
+        if provider_id == "openrouter":
+            from langchain_openai import ChatOpenAI
+
+            openrouter_kwargs: dict[str, Any] = {
+                "model": config.model_name or "meta-llama/llama-3-8b-instruct:free",
+                "api_key": api_key_secret or SecretStr("openrouter-key"),
+                "base_url": config.base_url or "https://openrouter.ai/api/v1",
+                "temperature": config.temperature,
+                **config.provider_params,
+            }
+            if config.max_tokens is not None:
+                openrouter_kwargs["max_tokens"] = config.max_tokens
+
+            return ChatOpenAI(**openrouter_kwargs)
+
+        # [Groq Provider] Instantiate high-throughput ChatGroq model instance
+        if provider_id == "groq":
+            from langchain_groq import ChatGroq
+
+            groq_kwargs: dict[str, Any] = {
+                "model": config.model_name or "llama-3.3-70b-versatile",
+                "temperature": config.temperature,
+                **config.provider_params,
+            }
+            if api_key_secret:
+                groq_kwargs["api_key"] = api_key_secret
+            if config.max_tokens is not None:
+                groq_kwargs["max_tokens"] = config.max_tokens
+            if config.base_url:
+                groq_kwargs["base_url"] = config.base_url
+
+            return ChatGroq(**groq_kwargs)
+
+        # [Mistral AI Provider] Instantiate official ChatMistralAI model instance
+        if provider_id in ("mistral", "mistralai"):
+            from langchain_mistralai import ChatMistralAI
+
+            mistral_kwargs: dict[str, Any] = {
+                "model": config.model_name or "mistral-large-latest",
+                "temperature": config.temperature,
+                **config.provider_params,
+            }
+            if api_key_secret:
+                mistral_kwargs["api_key"] = api_key_secret
+            if config.max_tokens is not None:
+                mistral_kwargs["max_tokens"] = config.max_tokens
+            if config.base_url:
+                mistral_kwargs["endpoint"] = config.base_url
+
+            return ChatMistralAI(**mistral_kwargs)
+
         # Normalize provider alias for LangChain initializer
         lc_provider_map = {
             "openai": "openai",
@@ -84,6 +136,10 @@ class LangChainModelProvider(ModelProvider):
             "claude": "anthropic",
             "gemini": "google_genai",
             "google": "google_genai",
+            "mistral": "mistralai",
+            "mistralai": "mistralai",
+            "groq": "groq",
+            "openrouter": "openai",
         }
         lc_provider = lc_provider_map.get(provider_id, provider_id)
 
@@ -105,8 +161,8 @@ class LangChainModelProvider(ModelProvider):
 
             return cast(BaseChatModel, init_chat_model(**kwargs, **config.provider_params))
         except Exception as exc:
-            # [Routing] Do not route non-OpenAI providers (e.g. Gemini, Anthropic) to OpenAI endpoint
-            if lc_provider in ("google_genai", "anthropic"):
+            # [Routing] Do not route non-OpenAI providers to generic OpenAI endpoint
+            if lc_provider in ("google_genai", "anthropic", "mistralai", "groq"):
                 logger.error(
                     f"[LangChain] Failed to initialize {lc_provider} model '{config.model_name}': {exc}"
                 )
@@ -143,6 +199,16 @@ class LangChainModelProvider(ModelProvider):
             )
         if provider_id in ("gemini", "google"):
             return settings.gemini_api_key.get_secret_value() if settings.gemini_api_key else None
+        if provider_id in ("mistral", "mistralai"):
+            return settings.mistral_api_key.get_secret_value() if settings.mistral_api_key else None
+        if provider_id == "groq":
+            return settings.groq_api_key.get_secret_value() if settings.groq_api_key else None
+        if provider_id == "openrouter":
+            return (
+                settings.openrouter_api_key.get_secret_value()
+                if settings.openrouter_api_key
+                else None
+            )
         return None
 
     @staticmethod

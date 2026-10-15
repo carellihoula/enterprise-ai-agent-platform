@@ -68,6 +68,18 @@ class Settings(BaseSettings):
         default=None,
         description="API key secret for Anthropic Claude provider",
     )
+    mistral_api_key: SecretStr | None = Field(
+        default=None,
+        description="API key secret for Mistral AI provider",
+    )
+    groq_api_key: SecretStr | None = Field(
+        default=None,
+        description="API key secret for Groq provider",
+    )
+    openrouter_api_key: SecretStr | None = Field(
+        default=None,
+        description="API key secret for OpenRouter provider",
+    )
     database_url: SecretStr = Field(
         default=SecretStr("sqlite:///./platform.db"),
         description="Database connection URI",

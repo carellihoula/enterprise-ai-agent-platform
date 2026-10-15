@@ -55,6 +55,24 @@ export const PRESET_PROVIDERS: ProviderPreset[] = [
     suggestedModels: [],
   },
   {
+    id: "mistral",
+    name: "Mistral AI",
+    defaultModel: "",
+    suggestedModels: [],
+  },
+  {
+    id: "groq",
+    name: "Groq",
+    defaultModel: "",
+    suggestedModels: [],
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    defaultModel: "",
+    suggestedModels: [],
+  },
+  {
     id: "custom",
     name: "Custom / Local LLM",
     defaultModel: "",

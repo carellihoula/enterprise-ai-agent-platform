@@ -34,11 +34,10 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
     activeModel,
     temperature,
     systemPrompt,
-    apiKeyGemini,
-    apiKeyOpenai,
-    apiKeyAnthropic,
-    apiKeyCustom,
-    baseUrlCustom,
+    currentApiKey,
+    setCurrentApiKey,
+    currentBaseUrl,
+    setCurrentBaseUrl,
     maskedKeys,
     hasApiKeys,
     currentProviderDef,
@@ -47,11 +46,6 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
     isSavedFeedback,
     setTemperature,
     setSystemPrompt,
-    setApiKeyGemini,
-    setApiKeyOpenai,
-    setApiKeyAnthropic,
-    setApiKeyCustom,
-    setBaseUrlCustom,
     setNewModelInput,
     setActiveModel,
     handleSelectProvider,
@@ -82,16 +76,10 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
 
         <ProviderCredentials
           currentProviderDef={currentProviderDef}
-          apiKeyGemini={apiKeyGemini}
-          setApiKeyGemini={setApiKeyGemini}
-          apiKeyOpenai={apiKeyOpenai}
-          setApiKeyOpenai={setApiKeyOpenai}
-          apiKeyAnthropic={apiKeyAnthropic}
-          setApiKeyAnthropic={setApiKeyAnthropic}
-          apiKeyCustom={apiKeyCustom}
-          setApiKeyCustom={setApiKeyCustom}
-          baseUrlCustom={baseUrlCustom}
-          setBaseUrlCustom={setBaseUrlCustom}
+          apiKey={currentApiKey}
+          setApiKey={setCurrentApiKey}
+          baseUrl={currentBaseUrl}
+          setBaseUrl={setCurrentBaseUrl}
           maskedKey={maskedKeys[currentProviderDef.id]}
           hasApiKey={hasApiKeys[currentProviderDef.id]}
         />
