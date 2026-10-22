@@ -87,3 +87,15 @@ if request_hash in self._response_cache:
   - Sub-views (e.g., headers, credential panels, model list selectors, slider controls) must reside in separate files and be assembled at the parent view level.
 - **Targeted Performance & Memoization**:
   - Small, isolated components localize re-renders, preventing expensive full-tree recalculations during real-time LLM token streaming and rapid user input events.
+
+---
+
+## 8. Python Testing Strategy (Pragmatic & Critical Coverage)
+- **Essential Functions Only**: Do NOT write tests for every single function, helper, or boilerplate method. Avoid test bloat.
+- **High-Value Focus**: Reserve unit and integration tests strictly for critical business logic, security/auth boundaries, multi-provider integrations, and essential API endpoints that require regression protection.
+
+---
+
+## 9. Toast Notification Guidelines (High-Signal Only)
+- **Important Information & Errors Only**: Use toast notifications strictly for high-impact events (e.g., unexpected backend failures, generation errors with retry actions, or explicit destructive operations).
+- **No Toast Spam**: Never display toasts for routine, trivial, or self-evident interactions (e.g., simple navigation, selecting an item, or automatic background syncs). Keep notifications subtle, purposeful, and unobtrusive.
