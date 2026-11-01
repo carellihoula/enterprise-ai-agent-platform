@@ -110,6 +110,21 @@ const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
               {children}
             </a>
           ),
+          img: ({ src, alt, ...props }) => {
+            // [Validation] Guard against empty src strings which trigger React 19 console errors and redundant page downloads
+            if (!src || typeof src !== "string" || src.trim() === "") {
+              return null;
+            }
+            return (
+              <img
+                src={src}
+                alt={alt || ""}
+                loading="lazy"
+                className="max-w-full h-auto rounded-md my-2"
+                {...props}
+              />
+            );
+          },
           code: ({ className: codeClassName, children, ...props }) => {
             const isInline = !codeClassName;
             if (isInline) {
