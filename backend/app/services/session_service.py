@@ -23,20 +23,20 @@ class SessionService:
         self.db = db
 
     def create_session(
-        self, title: str | None = None, assistant_id: str | None = None
+        self, title: str | None = None, agent_id: str | None = None
     ) -> ConversationSession:
         """Creates a new conversation session in the database.
 
         Args:
             title (str | None, optional): Optional title for the conversation session.
-            assistant_id (str | None, optional): Optional assistant identifier.
+            agent_id (str | None, optional): Optional agent identifier.
 
         Returns:
             ConversationSession: Newly created ORM session instance.
         """
         session_title = title or "New Conversation"
         # [Persistence] Instantiate and save new session object
-        db_session = ConversationSession(title=session_title, assistant_id=assistant_id)
+        db_session = ConversationSession(title=session_title, agent_id=agent_id)
         self.db.add(db_session)
         self.db.commit()
         self.db.refresh(db_session)

@@ -83,7 +83,7 @@ const BaseAssistantCard: React.FC<AssistantCardProps> = ({
                 )}
               </div>
               <p className="text-[11px] font-mono text-zinc-400 mt-0.5">
-                {assistant.provider_id} / {assistant.model_name || "default model"}
+                {assistant.model?.provider_id || assistant.provider_id || "groq"} / {assistant.model?.model_name || assistant.model_name || "default model"}
               </p>
             </div>
           </div>
@@ -91,14 +91,14 @@ const BaseAssistantCard: React.FC<AssistantCardProps> = ({
 
         {/* Description & System Prompt Snippet */}
         <p className="text-xs text-zinc-600 line-clamp-2 leading-relaxed mb-3">
-          {assistant.description || assistant.system_prompt || "No custom instructions configured."}
+          {assistant.description || assistant.instructions || assistant.system_prompt || "No custom instructions configured."}
         </p>
       </div>
 
       {/* Footer: Metadata Tags & Action Buttons */}
       <div className="pt-2.5 border-t border-zinc-100 flex items-center justify-between gap-2 mt-auto">
         <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-400">
-          <span>T: {assistant.temperature}</span>
+          <span>T: {assistant.model?.temperature ?? assistant.temperature ?? 0.7}</span>
           {assistant.tools && assistant.tools.length > 0 && (
             <span className="px-1.5 py-0.2 bg-zinc-100 rounded text-zinc-600">
               {assistant.tools.length} tools

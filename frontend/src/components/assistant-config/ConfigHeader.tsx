@@ -9,7 +9,7 @@ interface ConfigHeaderProps {
 }
 
 /**
- * Header banner for Assistant Configuration with title, mode indicator, and return action.
+ * Header banner for Agent Configuration with title, mode indicator, and return action.
  */
 export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   isEditing = false,
@@ -20,7 +20,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     <div className="flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row pb-5 border-b border-zinc-200">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-          {isEditing ? `Edit Assistant: ${assistantName || ""}` : "Create New Assistant"}
+          {isEditing ? `Edit Agent: ${assistantName || ""}` : "Create New Agent"}
         </h1>
       </div>
 
@@ -31,7 +31,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
         className="text-xs rounded-md border-zinc-200 text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 gap-1.5 shadow-none shrink-0"
       >
         <ArrowLeft className="w-3.5 h-3.5 text-zinc-400" />
-        <span>Back to Assistants</span>
+        <span>Back to Agents</span>
       </Button>
     </div>
   );

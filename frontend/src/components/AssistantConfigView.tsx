@@ -20,6 +20,8 @@ import {
   ModelListManager,
   TemperatureSlider,
   SystemPromptEditor,
+  ToolsEditor,
+  PoliciesEditor,
 } from "./assistant-config";
 import { useAssistantConfig } from "./assistant-config/useAssistantConfig";
 
@@ -47,6 +49,12 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
     activeModel,
     temperature,
     systemPrompt,
+    knowledge,
+    setKnowledge,
+    tools,
+    setTools,
+    policies,
+    setPolicies,
     currentApiKey,
     setCurrentApiKey,
     currentBaseUrl,
@@ -145,6 +153,18 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
           onSystemPromptChange={setSystemPrompt}
         />
 
+        {/* 7. Tools & Actions (including RAG, SQL, MCP, Builtin) */}
+        <ToolsEditor
+          tools={tools}
+          onChange={setTools}
+        />
+
+        {/* 8. Governance & Policies */}
+        <PoliciesEditor
+          policies={policies}
+          onChange={setPolicies}
+        />
+
         {/* Bottom Actions Footer */}
         <div className="flex items-center justify-end gap-2.5 pt-4 pb-12">
           <Button
@@ -153,7 +173,7 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
             onClick={onNavigateToPlayground}
             className="text-xs rounded-md border-zinc-200 text-zinc-700 hover:bg-zinc-50 shadow-none px-4 py-1.5"
           >
-            Annuler
+            Cancel
           </Button>
 
           <Button
@@ -171,10 +191,10 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
             )}
             <span>
               {isSubmitting
-                ? "Enregistrement..."
+                ? "Saving..."
                 : assistantToEdit
-                ? "Modifier l'assistant"
-                : "Créer l'assistant"}
+                ? "Save Changes"
+                : "Create Agent"}
             </span>
           </Button>
         </div>

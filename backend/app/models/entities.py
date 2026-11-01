@@ -32,40 +32,48 @@ def current_utc_time() -> datetime:
     return datetime.now(UTC)
 
 
-class Assistant(Base):
-    """SQLAlchemy ORM model representing a customized AI Assistant.
+class Agent(Base):
+    """SQLAlchemy ORM model representing an Enterprise AI Agent.
 
     Attributes:
         id (str): Primary key UUID string identifier.
-        name (str): Display name of the assistant (e.g., 'Python Architect', 'SQL Guru').
-        description (str | None): Brief description of what this assistant does.
-        avatar (str | None): Icon or avatar identifier for UI representation.
-        provider_id (str): Underlying provider identifier (e.g., 'groq', 'mistral', 'openai').
-        model_name (str): Target model name (e.g., 'llama-3.3-70b-versatile').
-        temperature (float): Sampling temperature (0.0 to 1.0).
-        max_tokens (int | None): Optional max token limit.
-        system_prompt (str | None): Persona and core instructions for this assistant.
-        is_default (bool): Whether this is the default assistant selected for new chats.
-        tools (list[dict[str, Any]]): JSON list of tool specifications for agentic workflows.
-        created_at (datetime): Timestamp when the assistant was created.
-        updated_at (datetime): Timestamp when the assistant was last updated.
+        name (str): Display name of the agent (e.g., 'Jira Triage Agent', 'HR Policy Expert').
+        description (str | None): Brief description of the agent's specialty and domain.
+        instructions (str): Core behavioral instructions and prompt persona.
+        avatar (str | None): UI avatar icon identifier.
+        provider_id (str): Foundational model provider identifier (e.g., 'groq', 'openai').
+        model_name (str): Target model identifier (e.g., 'llama-3.3-70b-versatile').
+        temperature (float): Sampling temperature parameter (0.0 to 1.0).
+        max_tokens (int | None): Optional ceiling on generation tokens.
+        api_key_encrypted (str | None): Fernet-encrypted API key string.
+        base_url (str | None): Optional custom endpoint base URL.
+        is_default (bool): Whether this agent serves as the workspace default.
+        tools (list[dict[str, Any]]): JSON array of tool specifications and MCP servers.
+        knowledge (list[dict[str, Any]]): JSON array of connected knowledge bases queried by RAG agents.
+        policies (dict[str, Any] | list[dict[str, Any]]): JSON governance and guardrail policies.
+        created_at (datetime): Creation timestamp with timezone.
+        updated_at (datetime): Last modification timestamp with timezone.
     """
 
-    __tablename__ = "assistants"
+    __tablename__ = "agents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    avatar: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    instructions: Mapped[str] = mapped_column(Text, nullable=False)
+    avatar: Mapped[str | None] = mapped_column(String(50), nullable=True, default="Bot")
     provider_id: Mapped[str] = mapped_column(String(50), nullable=False, default="groq")
     model_name: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     temperature: Mapped[float] = mapped_column(Float, nullable=False, default=0.7)
     max_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     tools: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    knowledge: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    policies: Mapped[dict[str, Any] | list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=current_utc_time)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=current_utc_time, onupdate=current_utc_time
@@ -78,20 +86,20 @@ class ConversationSession(Base):
     Attributes:
         id (str): Primary key UUID string identifier.
         title (str): Title or summary of the conversation session.
-        assistant_id (str | None): Optional foreign key referencing the associated Assistant.
+        agent_id (str | None): Optional foreign key referencing the associated Agent.
         created_at (datetime): Timestamp when the session was created.
         updated_at (datetime): Timestamp when the session was last updated.
         messages (list[SessionMessage]): Relationship to associated session messages.
-        assistant (Assistant | None): Relationship to associated Assistant.
+        agent (Agent | None): Relationship to associated Agent.
     """
 
     __tablename__ = "conversation_sessions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="New Conversation")
-    assistant_id: Mapped[str | None] = mapped_column(
+    agent_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey("assistants.id", ondelete="SET NULL"),
+        ForeignKey("agents.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -100,8 +108,8 @@ class ConversationSession(Base):
         DateTime(timezone=True), default=current_utc_time, onupdate=current_utc_time
     )
 
-    # [Relationship] Associated Assistant
-    assistant: Mapped[Assistant | None] = relationship("Assistant")
+    # [Relationship] Associated Agent
+    agent: Mapped[Agent | None] = relationship("Agent")
 
     # [Relationship] Cascade deletion of all messages when session is deleted
     messages: Mapped[list["SessionMessage"]] = relationship(

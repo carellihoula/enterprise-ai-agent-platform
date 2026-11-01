@@ -62,13 +62,16 @@ export const AssistantPickerModal: React.FC<AssistantPickerModalProps> = ({
   const filteredAssistants = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return assistants;
-    return assistants.filter(
-      (a) =>
+    return assistants.filter((a) => {
+      const prov = a.model?.provider_id || a.provider_id || "";
+      const model = a.model?.model_name || a.model_name || "";
+      return (
         a.name.toLowerCase().includes(query) ||
         (a.description && a.description.toLowerCase().includes(query)) ||
-        a.provider_id.toLowerCase().includes(query) ||
-        a.model_name.toLowerCase().includes(query),
-    );
+        prov.toLowerCase().includes(query) ||
+        model.toLowerCase().includes(query)
+      );
+    });
   }, [assistants, searchQuery]);
 
   if (!isOpen) return null;
@@ -92,11 +95,11 @@ export const AssistantPickerModal: React.FC<AssistantPickerModalProps> = ({
                 <Bot className="w-3.5 h-3.5 text-white" />
               </div>
               <h2 className="text-sm font-semibold text-zinc-900 tracking-tight">
-                Enterprise Assistant Selector
+                Enterprise Agent Selector
               </h2>
             </div>
             <p className="text-xs text-zinc-500 mt-1">
-              Select the specialized AI assistant to drive this conversation.
+              Select the specialized AI agent to drive this conversation.
             </p>
           </div>
           <button
@@ -172,7 +175,7 @@ export const AssistantPickerModal: React.FC<AssistantPickerModalProps> = ({
                           ? "bg-white text-zinc-900 border-zinc-300"
                           : "text-zinc-500 bg-zinc-100 border-zinc-200"
                       }`}>
-                        {assistant.provider_id}/{assistant.model_name}
+                        {assistant.model?.provider_id || assistant.provider_id || "groq"}/{assistant.model?.model_name || assistant.model_name || "default"}
                       </span>
                     </div>
 
@@ -198,7 +201,7 @@ export const AssistantPickerModal: React.FC<AssistantPickerModalProps> = ({
               className="flex items-center gap-1.5 text-xs font-medium text-zinc-900 hover:text-black transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Create New Assistant</span>
+              <span>Create New Agent</span>
             </button>
           ) : (
             <div />

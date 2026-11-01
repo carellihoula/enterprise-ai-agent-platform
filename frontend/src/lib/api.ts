@@ -6,7 +6,14 @@
  */
 
 import { Message, Session } from '@/types/chat';
-import { Assistant, AssistantCreatePayload, AssistantUpdatePayload } from '@/types/assistant';
+import {
+  Agent,
+  AgentCreatePayload,
+  AgentUpdatePayload,
+  Assistant,
+  AssistantCreatePayload,
+  AssistantUpdatePayload,
+} from '@/types/agent';
 import { cleanSerializedContentBlocks } from '@/lib/utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
@@ -19,11 +26,11 @@ export async function fetchSessions(): Promise<Session[]> {
   return res.json();
 }
 
-export async function createSession(title?: string, assistantId?: string): Promise<Session> {
+export async function createSession(title?: string, agentId?: string): Promise<Session> {
   const res = await fetch(`${API_BASE_URL}/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, assistant_id: assistantId }),
+    body: JSON.stringify({ title, agent_id: agentId }),
   });
   if (!res.ok) {
     throw new Error(`Failed to create session (${res.status})`);
@@ -160,54 +167,61 @@ export async function streamChatCompletion({
   }
 }
 
-export async function fetchAssistants(): Promise<Assistant[]> {
-  const res = await fetch(`${API_BASE_URL}/assistants`, { cache: 'no-store' });
+export async function fetchAgents(): Promise<Agent[]> {
+  const res = await fetch(`${API_BASE_URL}/agents`, { cache: 'no-store' });
   if (!res.ok) {
-    throw new Error(`Failed to fetch assistants (${res.status})`);
+    throw new Error(`Failed to fetch agents (${res.status})`);
   }
   return res.json();
 }
 
-export async function fetchAssistant(id: string): Promise<Assistant> {
-  const res = await fetch(`${API_BASE_URL}/assistants/${id}`, { cache: 'no-store' });
+export async function fetchAgent(id: string): Promise<Agent> {
+  const res = await fetch(`${API_BASE_URL}/agents/${id}`, { cache: 'no-store' });
   if (!res.ok) {
-    throw new Error(`Failed to fetch assistant ${id} (${res.status})`);
+    throw new Error(`Failed to fetch agent ${id} (${res.status})`);
   }
   return res.json();
 }
 
-export async function createAssistantApi(payload: AssistantCreatePayload): Promise<Assistant> {
-  const res = await fetch(`${API_BASE_URL}/assistants`, {
+export async function createAgentApi(payload: AgentCreatePayload): Promise<Agent> {
+  const res = await fetch(`${API_BASE_URL}/agents`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    throw new Error(`Failed to create assistant (${res.status})`);
+    throw new Error(`Failed to create agent (${res.status})`);
   }
   return res.json();
 }
 
-export async function updateAssistantApi(
+export async function updateAgentApi(
   id: string,
-  payload: AssistantUpdatePayload
-): Promise<Assistant> {
-  const res = await fetch(`${API_BASE_URL}/assistants/${id}`, {
+  payload: AgentUpdatePayload
+): Promise<Agent> {
+  const res = await fetch(`${API_BASE_URL}/agents/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    throw new Error(`Failed to update assistant ${id} (${res.status})`);
+    throw new Error(`Failed to update agent ${id} (${res.status})`);
   }
   return res.json();
 }
 
-export async function deleteAssistantApi(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/assistants/${id}`, {
+export async function deleteAgentApi(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/agents/${id}`, {
     method: 'DELETE',
   });
   if (!res.ok) {
-    throw new Error(`Failed to delete assistant ${id} (${res.status})`);
+    throw new Error(`Failed to delete agent ${id} (${res.status})`);
   }
 }
+
+// [Compatibility Aliases]
+export const fetchAssistants = fetchAgents;
+export const fetchAssistant = fetchAgent;
+export const createAssistantApi = createAgentApi;
+export const updateAssistantApi = updateAgentApi;
+export const deleteAssistantApi = deleteAgentApi;

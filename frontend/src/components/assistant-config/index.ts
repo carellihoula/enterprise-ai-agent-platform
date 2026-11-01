@@ -6,3 +6,5 @@ export * from "./ProviderCredentials";
 export * from "./ModelListManager";
 export * from "./TemperatureSlider";
 export * from "./SystemPromptEditor";
+export * from "./ToolsEditor";
+export * from "./PoliciesEditor";

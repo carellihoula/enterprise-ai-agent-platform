@@ -39,23 +39,23 @@ export const AssistantIdentityEditor: React.FC<AssistantIdentityEditorProps> = (
     <div className="space-y-4 pb-6 border-b border-zinc-200">
       <div>
         <h2 className="text-sm font-semibold text-zinc-900 tracking-tight">
-          Assistant Identity
+          Agent Identity
         </h2>
         <p className="text-xs text-zinc-500 mt-0.5">
-          Give your assistant a clear name, role description, and visual icon.
+          Give your agent a clear name, role description, and visual icon.
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <Label className="text-xs font-medium text-zinc-700">
-            Assistant Name <span className="text-zinc-900">*</span>
+            Agent Name <span className="text-zinc-900">*</span>
           </Label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Code Reviewer, Data Analyst"
+            placeholder="e.g., Code Reviewer, Jira Triage Agent"
             className="w-full mt-1 px-3 py-1.5 text-xs bg-white border border-zinc-300 rounded-md focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-colors"
           />
         </div>
@@ -110,7 +110,7 @@ export const AssistantIdentityEditor: React.FC<AssistantIdentityEditorProps> = (
           className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 h-4 w-4 accent-zinc-900"
         />
         <label htmlFor="isDefaultAssistant" className="text-xs text-zinc-700 cursor-pointer select-none">
-          Set as default assistant for new conversations
+          Set as default agent for new conversations
         </label>
       </div>
     </div>

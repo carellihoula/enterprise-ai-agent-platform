@@ -101,12 +101,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <button
               type="button"
               onClick={onOpenAssistantPicker}
-              title="Select AI Assistant"
+              title="Select AI Agent"
               className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:text-zinc-900 bg-white hover:bg-zinc-100 border border-zinc-200 rounded-md transition-colors group"
             >
               <Globe className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-800 transition-colors" />
               <span className="hidden sm:inline">
-                {activeAssistantName ? `Assistant: ${activeAssistantName}` : "Enterprise Search"}
+                {activeAssistantName ? `Agent: ${activeAssistantName}` : "Select Agent"}
               </span>
             </button>
           </div>

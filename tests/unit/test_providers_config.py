@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.core.database import SessionLocal, init_db
 from app.core.security import decrypt_api_key, encrypt_api_key, mask_api_key
 from app.main import app
-from app.models.entities import Assistant
+from app.models.entities import Agent
 
 
 def test_encryption_and_decryption_cycle() -> None:
@@ -34,45 +34,47 @@ def test_mask_api_key_formats() -> None:
     assert masked.endswith("9999")
 
 
-def test_assistant_credentials_encryption() -> None:
-    """Validates saving assistant configuration with encrypted credentials and masked keys."""
+def test_agent_credentials_encryption() -> None:
+    """Validates saving agent configuration with encrypted credentials and masked keys."""
     init_db()
     client = TestClient(app)
     db = SessionLocal()
-    assistant_id = None
+    agent_id = None
     try:
         payload = {
-            "name": "Secured Assistant",
-            "description": "Assistant with encrypted credentials",
+            "name": "Secured Agent",
+            "description": "Agent with encrypted credentials",
             "avatar": "Bot",
-            "provider_id": "groq",
-            "model_name": "llama-3.3-70b-versatile",
-            "temperature": 0.5,
-            "system_prompt": "You are a secure enterprise assistant.",
-            "api_key": "sk-secret-user-key-12345",
-            "base_url": "https://api.groq.com/openai/v1",
+            "instructions": "You are a secure enterprise agent.",
+            "model": {
+                "provider_id": "groq",
+                "model_name": "llama-3.3-70b-versatile",
+                "temperature": 0.5,
+                "api_key": "sk-secret-user-key-12345",
+                "base_url": "https://api.groq.com/openai/v1",
+            },
             "is_default": False,
             "tools": [],
         }
-        resp = client.post("/api/v1/assistants", json=payload)
+        resp = client.post("/api/v1/agents", json=payload)
         assert resp.status_code == 201
         data = resp.json()
-        assistant_id = data["id"]
-        assert data["name"] == "Secured Assistant"
+        agent_id = data["id"]
+        assert data["name"] == "Secured Agent"
         assert data["has_api_key"] is True
-        assert data["masked_api_key"] is not None
-        assert "sk-secret-user-key-12345" not in data["masked_api_key"]
-        assert data["base_url"] == "https://api.groq.com/openai/v1"
+        assert data["model"]["api_key"] is not None
+        assert "sk-secret-user-key-12345" not in data["model"]["api_key"]
+        assert data["model"]["base_url"] == "https://api.groq.com/openai/v1"
 
         # Verify encrypted key in database
-        db_record = db.query(Assistant).filter(Assistant.id == assistant_id).first()
+        db_record = db.query(Agent).filter(Agent.id == agent_id).first()
         assert db_record is not None
         assert db_record.api_key_encrypted is not None
         assert db_record.api_key_encrypted != "sk-secret-user-key-12345"
         assert decrypt_api_key(db_record.api_key_encrypted) == "sk-secret-user-key-12345"
     finally:
-        if assistant_id:
-            db.query(Assistant).filter(Assistant.id == assistant_id).delete()
+        if agent_id:
+            db.query(Agent).filter(Agent.id == agent_id).delete()
             db.commit()
         db.close()
 

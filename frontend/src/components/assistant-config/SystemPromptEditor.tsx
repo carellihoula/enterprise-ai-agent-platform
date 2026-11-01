@@ -18,16 +18,16 @@ export const SystemPromptEditor: React.FC<SystemPromptEditorProps> = ({
     <div className="space-y-3 pb-6">
       <div className="flex items-center justify-between">
         <Label className="text-xs font-semibold text-zinc-900 tracking-tight">
-          5. Assistant System Prompt
+          5. Agent Instructions (Prompt Persona)
         </Label>
         <span className="text-[11px] font-mono text-zinc-400">
-          Persistent context header
+          Core behavioral instructions
         </span>
       </div>
 
       <textarea
         rows={5}
-        placeholder="e.g., You are an enterprise AI assistant specialized in software engineering and cloud architecture. Provide structured, production-ready solutions with clear explanations..."
+        placeholder="e.g., You are an enterprise AI agent specialized in IT ticket triage and code review. Follow company SOPs and format responses clearly..."
         value={systemPrompt}
         onChange={(e) => onSystemPromptChange(e.target.value)}
         className="w-full px-3 py-2 text-xs font-mono text-zinc-900 placeholder:text-zinc-400 bg-white border border-zinc-300 rounded-md focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-colors resize-y leading-relaxed"

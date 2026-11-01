@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import SessionLocal, get_db
 from app.core.security import decrypt_api_key
-from app.models.entities import Assistant
+from app.models.entities import Agent
 from app.providers.llm.base import (
     ChatMessage,
     MessageRole,
@@ -58,9 +58,8 @@ class ChatRequest(BaseModel):
     max_tokens: int | None = Field(default=None, description="Max completion tokens limit")
     system_instruction: str | None = Field(default=None, description="System prompt instructions")
     session_id: str | None = Field(default=None, description="Optional session ID for persistence")
-    assistant_id: str | None = Field(
-        default=None, description="Optional target assistant identifier"
-    )
+    agent_id: str | None = Field(default=None, description="Optional target agent identifier")
+    assistant_id: str | None = Field(default=None, description="Deprecated alias for agent_id")
     api_key: str | None = Field(default=None, description="Optional client API key")
     base_url: str | None = Field(default=None, description="Optional custom base URL endpoint")
 
@@ -197,34 +196,35 @@ def _resolve_provider_credentials(
     base_url = request.base_url
     system_instruction = request.system_instruction
 
-    # [Assistant Override] If assistant_id provided, adopt assistant's persona and model configuration
-    if request.assistant_id:
-        assistant = db.query(Assistant).filter(Assistant.id == request.assistant_id).first()
-        if assistant:
-            if not system_instruction and assistant.system_prompt:
-                system_instruction = assistant.system_prompt
+    # [Agent Override] If agent_id (or legacy assistant_id) provided, adopt agent's persona and model configuration
+    target_agent_id = request.agent_id or request.assistant_id
+    if target_agent_id:
+        agent = db.query(Agent).filter(Agent.id == target_agent_id).first()
+        if agent:
+            if not system_instruction and agent.instructions:
+                system_instruction = agent.instructions
             if not request.provider_name or request.provider_name == "openai":
-                request.provider_name = assistant.provider_id
+                request.provider_name = agent.provider_id
             if not request.model_name:
-                request.model_name = assistant.model_name
-            if not api_key and assistant.api_key_encrypted:
-                api_key = decrypt_api_key(assistant.api_key_encrypted)
-            if not base_url and assistant.base_url:
-                base_url = assistant.base_url
+                request.model_name = agent.model_name
+            if not api_key and agent.api_key_encrypted:
+                api_key = decrypt_api_key(agent.api_key_encrypted)
+            if not base_url and agent.base_url:
+                base_url = agent.base_url
     elif request.provider_name:
-        # [Fallback to Provider Match] Check if an assistant matches the requested provider
-        matched_ast = (
-            db.query(Assistant)
-            .filter(Assistant.provider_id == request.provider_name.lower().strip())
+        # [Fallback to Provider Match] Check if an agent matches the requested provider
+        matched_agent = (
+            db.query(Agent)
+            .filter(Agent.provider_id == request.provider_name.lower().strip())
             .first()
         )
-        if matched_ast:
-            if not api_key and matched_ast.api_key_encrypted:
-                api_key = decrypt_api_key(matched_ast.api_key_encrypted)
-            if not base_url and matched_ast.base_url:
-                base_url = matched_ast.base_url
-            if not system_instruction and matched_ast.system_prompt:
-                system_instruction = matched_ast.system_prompt
+        if matched_agent:
+            if not api_key and matched_agent.api_key_encrypted:
+                api_key = decrypt_api_key(matched_agent.api_key_encrypted)
+            if not base_url and matched_agent.base_url:
+                base_url = matched_agent.base_url
+            if not system_instruction and matched_agent.instructions:
+                system_instruction = matched_agent.instructions
 
     return api_key, base_url, system_instruction
 

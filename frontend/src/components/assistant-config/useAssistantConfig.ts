@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
 import { ModelConfigState } from "@/types/chat";
-import { Assistant, AssistantCreatePayload, AssistantUpdatePayload } from "@/types/assistant";
+import { Agent, AgentCreatePayload, AgentUpdatePayload, KnowledgeSource } from "@/types/agent";
 import { SUPPORTED_PROVIDERS, ProviderDefinition } from "./types";
 
 interface UseAssistantConfigProps {
   config: ModelConfigState;
-  assistantToEdit?: Assistant | null;
+  assistantToEdit?: Agent | null;
   onSaveConfig: (updatedConfig: ModelConfigState) => void;
   onNavigateToPlayground: () => void;
-  onCreateAssistant?: (payload: AssistantCreatePayload) => Promise<void>;
-  onUpdateAssistant?: (id: string, payload: AssistantUpdatePayload) => Promise<void>;
+  onCreateAssistant?: (payload: any) => Promise<void>;
+  onUpdateAssistant?: (id: string, payload: any) => Promise<void>;
 }
 
 /**
@@ -29,22 +29,31 @@ export function useAssistantConfig({
   const [avatar, setAvatar] = useState<string>(assistantToEdit?.avatar || "bot");
   const [isDefault, setIsDefault] = useState<boolean>(assistantToEdit?.is_default || false);
 
-  const [selectedProviderId, setSelectedProviderId] = useState<string>(
-    assistantToEdit?.provider_id || config.providerId || "groq",
-  );
-  const [activeModel, setActiveModel] = useState<string>(
-    assistantToEdit?.model_name || config.modelName || "",
-  );
+  const initProvId = assistantToEdit?.model?.provider_id || assistantToEdit?.provider_id || config.providerId || "groq";
+  const initModelName = assistantToEdit?.model?.model_name || assistantToEdit?.model_name || config.modelName || "";
+  const initApiKey = assistantToEdit?.model?.api_key || assistantToEdit?.masked_api_key;
+
+  const [selectedProviderId, setSelectedProviderId] = useState<string>(initProvId);
+  const [activeModel, setActiveModel] = useState<string>(initModelName);
   const [temperature, setTemperature] = useState<number>(
-    Math.min(assistantToEdit?.temperature ?? config.temperature ?? 0.7, 1.0),
+    Math.min(assistantToEdit?.model?.temperature ?? assistantToEdit?.temperature ?? config.temperature ?? 0.7, 1.0),
   );
   const [systemPrompt, setSystemPrompt] = useState<string>(
-    assistantToEdit?.system_prompt ?? config.systemPrompt ?? "",
+    assistantToEdit?.instructions || (assistantToEdit as any)?.system_prompt || config.systemPrompt || "",
+  );
+  const [knowledge, setKnowledge] = useState<KnowledgeSource[]>(
+    assistantToEdit?.knowledge || []
+  );
+  const [tools, setTools] = useState<Array<Record<string, unknown>>>(
+    assistantToEdit?.tools || []
+  );
+  const [policies, setPolicies] = useState<Record<string, unknown>>(
+    (assistantToEdit?.policies as Record<string, unknown>) || {}
   );
 
   const [apiKeys, setApiKeys] = useState<Record<string, string>>(() => {
-    if (assistantToEdit?.provider_id && assistantToEdit.masked_api_key) {
-      return { [assistantToEdit.provider_id]: assistantToEdit.masked_api_key };
+    if (initProvId && initApiKey) {
+      return { [initProvId]: initApiKey };
     }
     return {};
   });
@@ -53,14 +62,14 @@ export function useAssistantConfig({
     openrouter: "https://openrouter.ai/api/v1",
   });
   const [maskedKeys, setMaskedKeys] = useState<Record<string, string>>(() => {
-    if (assistantToEdit?.provider_id && assistantToEdit.masked_api_key) {
-      return { [assistantToEdit.provider_id]: assistantToEdit.masked_api_key };
+    if (initProvId && initApiKey) {
+      return { [initProvId]: initApiKey };
     }
     return {};
   });
   const [hasApiKeys, setHasApiKeys] = useState<Record<string, boolean>>(() => {
-    if (assistantToEdit?.provider_id && assistantToEdit.has_api_key) {
-      return { [assistantToEdit.provider_id]: true };
+    if (initProvId && (initApiKey || assistantToEdit?.has_api_key)) {
+      return { [initProvId]: true };
     }
     return {};
   });
@@ -69,8 +78,8 @@ export function useAssistantConfig({
     SUPPORTED_PROVIDERS.forEach((prov) => {
       initialModels[prov.id] = [];
     });
-    if (assistantToEdit?.model_name) {
-      initialModels[assistantToEdit.provider_id] = [assistantToEdit.model_name];
+    if (initProvId && initModelName) {
+      initialModels[initProvId] = [initModelName];
     }
     return initialModels;
   });
@@ -81,53 +90,62 @@ export function useAssistantConfig({
   // [Sync] Update state when assistantToEdit changes
   useEffect(() => {
     if (assistantToEdit) {
+      const provId = assistantToEdit.model?.provider_id || assistantToEdit.provider_id || "groq";
+      const modelName = assistantToEdit.model?.model_name || assistantToEdit.model_name || "";
+      const temp = assistantToEdit.model?.temperature ?? assistantToEdit.temperature ?? 0.7;
+      const maskedKey = assistantToEdit.model?.api_key || assistantToEdit.masked_api_key;
+      const baseUrl = assistantToEdit.model?.base_url || assistantToEdit.base_url;
+
       setName(assistantToEdit.name);
       setDescription(assistantToEdit.description || "");
       setAvatar(assistantToEdit.avatar || "bot");
-      setSelectedProviderId(assistantToEdit.provider_id);
-      setActiveModel(assistantToEdit.model_name || "");
-      setTemperature(assistantToEdit.temperature ?? 0.7);
-      setSystemPrompt(assistantToEdit.system_prompt || "");
+      setSelectedProviderId(provId);
+      setActiveModel(modelName);
+      setTemperature(temp);
+      setSystemPrompt(assistantToEdit.instructions || (assistantToEdit as any).system_prompt || "");
       setIsDefault(assistantToEdit.is_default || false);
-      if (assistantToEdit.model_name) {
+      setKnowledge(assistantToEdit.knowledge || []);
+      setTools(assistantToEdit.tools || []);
+      setPolicies((assistantToEdit.policies as Record<string, unknown>) || {});
+      if (modelName) {
         setProviderModels((prev) => {
-          const list = prev[assistantToEdit.provider_id] || [];
-          if (!list.includes(assistantToEdit.model_name)) {
+          const list = prev[provId] || [];
+          if (!list.includes(modelName)) {
             return {
               ...prev,
-              [assistantToEdit.provider_id]: [assistantToEdit.model_name, ...list],
+              [provId]: [modelName, ...list],
             };
           }
           return prev;
         });
       }
-      if (assistantToEdit.masked_api_key) {
+      if (maskedKey) {
         setMaskedKeys((prev) => ({
           ...prev,
-          [assistantToEdit.provider_id]: assistantToEdit.masked_api_key!,
+          [provId]: maskedKey,
         }));
         setHasApiKeys((prev) => ({
           ...prev,
-          [assistantToEdit.provider_id]: true,
+          [provId]: true,
         }));
         setApiKeys((prev) => ({
           ...prev,
-          [assistantToEdit.provider_id]: assistantToEdit.masked_api_key!,
+          [provId]: maskedKey,
         }));
       } else {
         setHasApiKeys((prev) => ({
           ...prev,
-          [assistantToEdit.provider_id]: false,
+          [provId]: false,
         }));
         setApiKeys((prev) => ({
           ...prev,
-          [assistantToEdit.provider_id]: "",
+          [provId]: "",
         }));
       }
-      if (assistantToEdit.base_url) {
+      if (baseUrl) {
         setBaseUrls((prev) => ({
           ...prev,
-          [assistantToEdit.provider_id]: assistantToEdit.base_url!,
+          [provId]: baseUrl,
         }));
       }
     } else {
@@ -192,10 +210,10 @@ export function useAssistantConfig({
   const setCurrentBaseUrl = (val: string) =>
     setBaseUrls((prev) => ({ ...prev, [selectedProviderId]: val }));
 
-  // [Submit Action] Handle Create vs Modify Assistant
+  // [Submit Action] Handle Create vs Modify Agent
   const handleSubmitAssistant = async () => {
     if (!name.trim()) {
-      setValidationError("Please specify an Assistant Name");
+      setValidationError("Please specify an Agent Name");
       return;
     }
     setValidationError(null);
@@ -224,31 +242,37 @@ export function useAssistantConfig({
 
       const finalModelName = activeModel || currentModelList[0] || "";
 
+      const modelPayload = {
+        provider_id: selectedProviderId,
+        model_name: finalModelName,
+        temperature,
+        base_url: baseUrlInput,
+        api_key: apiKeyToSubmit || undefined,
+      };
+
       if (assistantToEdit && onUpdateAssistant) {
         await onUpdateAssistant(assistantToEdit.id, {
           name: name.trim(),
           description: description.trim(),
           avatar,
-          provider_id: selectedProviderId,
-          model_name: finalModelName,
-          temperature,
-          system_prompt: systemPrompt.trim(),
+          instructions: systemPrompt.trim(),
+          model: modelPayload,
+          knowledge,
+          tools,
+          policies,
           is_default: isDefault,
-          api_key: apiKeyToSubmit,
-          base_url: baseUrlInput,
         });
       } else if (onCreateAssistant) {
         await onCreateAssistant({
           name: name.trim(),
           description: description.trim(),
           avatar,
-          provider_id: selectedProviderId,
-          model_name: finalModelName,
-          temperature,
-          system_prompt: systemPrompt.trim(),
+          instructions: systemPrompt.trim(),
+          model: modelPayload,
+          knowledge,
+          tools,
+          policies,
           is_default: isDefault,
-          api_key: apiKeyToSubmit || undefined,
-          base_url: baseUrlInput,
         });
       }
 
@@ -263,7 +287,7 @@ export function useAssistantConfig({
 
       onNavigateToPlayground();
     } catch (err: any) {
-      setValidationError(err.message || "Failed to save assistant");
+      setValidationError(err.message || "Failed to save agent");
     } finally {
       setIsSubmitting(false);
     }
@@ -282,6 +306,12 @@ export function useAssistantConfig({
     activeModel,
     temperature,
     systemPrompt,
+    knowledge,
+    setKnowledge,
+    tools,
+    setTools,
+    policies,
+    setPolicies,
     currentApiKey,
     setCurrentApiKey,
     currentBaseUrl,
