@@ -9,12 +9,15 @@
 import React, { memo, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
+import rehypeKatex from "rehype-katex";
 import "highlight.js/styles/github-dark.css";
+import "katex/dist/katex.min.css";
 import { cn, cleanSerializedContentBlocks } from "@/lib/utils";
 import { MarkdownRendererProps } from "./types";
-import { processStreamingCodeBlocks } from "./markdownUtils";
+import { processStreamingCodeBlocks, normalizeLatexMath } from "./markdownUtils";
 import { CodePreBlock } from "./CodePreBlock";
 import { TableBlock } from "./TableBlock";
 import { InlineCodeBlock } from "./InlineCodeBlock";
@@ -24,10 +27,11 @@ const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
   isStreaming = false,
   className,
 }) => {
-  // [Preprocessing] Clean synthetic serialized artifacts and stabilize streaming code blocks
+  // [Preprocessing] Clean synthetic serialized artifacts, normalize LaTeX delimiters, and stabilize streaming code blocks
   const processedContent = useMemo(() => {
     const cleaned = cleanSerializedContentBlocks(content || "");
-    return processStreamingCodeBlocks(cleaned, isStreaming);
+    const mathNormalized = normalizeLatexMath(cleaned);
+    return processStreamingCodeBlocks(mathNormalized, isStreaming);
   }, [content, isStreaming]);
 
   return (
@@ -38,8 +42,8 @@ const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
       )}
     >
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw, rehypeHighlight]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeRaw, [rehypeKatex, { throwOnError: false }], rehypeHighlight]}
         components={{
           h1: ({ children }) => (
             <h1 className="text-lg font-bold text-zinc-900 mt-5 mb-2.5 pb-1 border-b border-zinc-200">
