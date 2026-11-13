@@ -19,6 +19,7 @@ import { useChatSession } from "@/hooks/useChatSession";
 import { useAgents } from "@/hooks/useAgents";
 import { AssistantsListView as AgentsListView, AssistantPickerModal as AgentPickerModal } from "@/components/assistants";
 import { McpConfigView } from "@/components/mcp";
+import { BuiltinToolsView } from "@/components/tools";
 import {
   EngineSubBar,
   ChatPlaygroundView,
@@ -224,14 +225,25 @@ export default function EnterpriseAppPage() {
           </div>
         )}
 
-        {/* 5. Placeholder Views for Other Modules */}
-        {activeTab !== "home" && activeTab !== "chat" && activeTab !== "agents" && activeTab !== "mcp" && (
-          <ModulePlaceholderView
-            activeTab={activeTab}
-            onNavigateHome={() => setActiveTab("home")}
-            onNavigatePlayground={() => setActiveTab("chat")}
-          />
+        {/* 5. Native Built-in Tools View */}
+        {activeTab === "tools" && (
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
+            <BuiltinToolsView />
+          </div>
         )}
+
+        {/* 6. Placeholder Views for Other Modules */}
+        {activeTab !== "home" &&
+          activeTab !== "chat" &&
+          activeTab !== "agents" &&
+          activeTab !== "mcp" &&
+          activeTab !== "tools" && (
+            <ModulePlaceholderView
+              activeTab={activeTab}
+              onNavigateHome={() => setActiveTab("home")}
+              onNavigatePlayground={() => setActiveTab("chat")}
+            />
+          )}
       </main>
 
       <CommandPalette

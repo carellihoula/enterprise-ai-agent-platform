@@ -293,3 +293,46 @@ export async function testMcpServer(server: McpServerDto): Promise<McpTestRespon
   }
   return res.json();
 }
+
+export interface BuiltinToolDescriptor {
+  name: string;
+  description: string;
+  category: string;
+  parameters_schema: Record<string, unknown>;
+  sample_args: Record<string, unknown>;
+}
+
+export interface BuiltinToolExecuteResult {
+  ok: boolean;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  latency_ms: number;
+}
+
+export async function fetchBuiltinTools(): Promise<BuiltinToolDescriptor[]> {
+  const res = await fetch(`${API_BASE_URL}/tools/builtin`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Failed to load built-in tools (${res.status}): ${errText}`);
+  }
+  return res.json();
+}
+
+export async function testBuiltinTool(
+  name: string,
+  args: Record<string, unknown>,
+): Promise<BuiltinToolExecuteResult> {
+  const res = await fetch(`${API_BASE_URL}/tools/builtin/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, arguments: args }),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Built-in tool execution failed (${res.status}): ${errText}`);
+  }
+  return res.json();
+}
