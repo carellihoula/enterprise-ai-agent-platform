@@ -108,6 +108,13 @@ class LangChainModelProvider(ModelProvider):
             if config.base_url:
                 groq_kwargs["base_url"] = config.base_url
 
+            # [Explicit Reasoning Flag] Only request parsed reasoning when explicitly enabled on the model config
+            if config.enable_reasoning and "reasoning_format" not in groq_kwargs:
+                try:
+                    return ChatGroq(**{**groq_kwargs, "reasoning_format": "parsed"})
+                except Exception:
+                    pass
+
             return ChatGroq(**groq_kwargs)
 
         # [Mistral AI Provider] Instantiate official ChatMistralAI model instance
@@ -158,6 +165,57 @@ class LangChainModelProvider(ModelProvider):
                 kwargs["api_key"] = api_key_secret
             if config.base_url:
                 kwargs["base_url"] = config.base_url
+
+            # [Explicit Reasoning Flag] Enable native provider reasoning only when configured on the assistant/model
+            if (
+                config.enable_reasoning
+                and lc_provider == "google_genai"
+                and "include_thoughts" not in config.provider_params
+            ):
+                try:
+                    return cast(
+                        BaseChatModel,
+                        init_chat_model(
+                            **kwargs,
+                            include_thoughts=True,
+                            **config.provider_params,
+                        ),
+                    )
+                except Exception:
+                    pass
+
+            if (
+                config.enable_reasoning
+                and lc_provider == "anthropic"
+                and "thinking" not in config.provider_params
+            ):
+                try:
+                    anthropic_kwargs = {
+                        **kwargs,
+                        "temperature": 1.0,
+                        "thinking": {"type": "enabled", "budget_tokens": 2048},
+                        **config.provider_params,
+                    }
+                    return cast(BaseChatModel, init_chat_model(**anthropic_kwargs))
+                except Exception:
+                    pass
+
+            if (
+                config.enable_reasoning
+                and lc_provider == "openai"
+                and "reasoning" not in config.provider_params
+            ):
+                try:
+                    openai_reasoning_kwargs = {
+                        **kwargs,
+                        "use_responses_api": True,
+                        "reasoning": {"summary": "auto"},
+                        **config.provider_params,
+                    }
+                    openai_reasoning_kwargs.pop("temperature", None)
+                    return cast(BaseChatModel, init_chat_model(**openai_reasoning_kwargs))
+                except Exception:
+                    pass
 
             return cast(BaseChatModel, init_chat_model(**kwargs, **config.provider_params))
         except Exception as exc:
@@ -261,6 +319,8 @@ class LangChainModelProvider(ModelProvider):
                 if isinstance(item, str):
                     texts.append(item)
                 elif isinstance(item, dict):
+                    if item.get("type") in ("thinking", "reasoning"):
+                        continue
                     # [Extraction] Extract text payload from multimodal / structured text blocks
                     text_val = item.get("text")
                     if text_val and isinstance(text_val, str):
@@ -275,6 +335,97 @@ class LangChainModelProvider(ModelProvider):
                 return text_val
 
         return ""
+
+    @staticmethod
+    def extract_chunk_reasoning(chunk: Any) -> str:
+        """Extracts incremental reasoning/thinking text from a streamed LangChain chunk.
+
+        Args:
+            chunk (Any): Streamed AIMessageChunk or response message.
+
+        Returns:
+            str: Extracted reasoning delta string, or empty string.
+        """
+        parts: list[str] = []
+        extra = getattr(chunk, "additional_kwargs", None) or {}
+        for key in ("reasoning_content", "thinking", "reasoning"):
+            val = extra.get(key)
+            if isinstance(val, str) and val:
+                parts.append(val)
+
+        content = getattr(chunk, "content", None)
+        if isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") in ("thinking", "reasoning"):
+                    txt = block.get("thinking") or block.get("text") or block.get("reasoning")
+                    if isinstance(txt, str) and txt:
+                        parts.append(txt)
+                    summary = block.get("summary")
+                    if isinstance(summary, list):
+                        for s_item in summary:
+                            if isinstance(s_item, dict) and isinstance(s_item.get("text"), str):
+                                parts.append(s_item["text"])
+        return "".join(parts)
+
+    @staticmethod
+    def split_think_tags_step(
+        buffer: str, in_think: bool, incoming: str
+    ) -> tuple[str, str, str, bool]:
+        """Incrementally splits `<think>...</think>` sections across streaming chunks.
+
+        Args:
+            buffer (str): Carry-over partial tag buffer from previous chunk.
+            in_think (bool): Whether the stream is currently inside a `<think>` block.
+            incoming (str): Newly arrived text delta.
+
+        Returns:
+            tuple[str, str, str, bool]: `(answer_delta, reasoning_delta, next_buffer, next_in_think)`.
+        """
+        data = buffer + incoming
+        answer_out: list[str] = []
+        reason_out: list[str] = []
+        open_tag = "<think>"
+        close_tag = "</think>"
+
+        while data:
+            if in_think:
+                idx = data.lower().find(close_tag)
+                if idx != -1:
+                    reason_out.append(data[:idx])
+                    data = data[idx + len(close_tag) :]
+                    in_think = False
+                else:
+                    # [Boundary Guard] Keep trailing prefix in case `</think>` spans chunks
+                    keep = min(len(data), len(close_tag) - 1)
+                    if keep > 0 and data[-keep:].startswith("<"):
+                        reason_out.append(data[:-keep])
+                        data = data[-keep:]
+                        break
+                    last_lt = data.rfind("<")
+                    if last_lt != -1 and len(data) - last_lt < len(close_tag):
+                        reason_out.append(data[:last_lt])
+                        data = data[last_lt:]
+                        break
+                    reason_out.append(data)
+                    data = ""
+            else:
+                idx = data.lower().find(open_tag)
+                if idx != -1:
+                    answer_out.append(data[:idx])
+                    data = data[idx + len(open_tag) :]
+                    in_think = True
+                else:
+                    last_lt = data.rfind("<")
+                    if last_lt != -1 and len(data) - last_lt < len(open_tag):
+                        answer_out.append(data[:last_lt])
+                        data = data[last_lt:]
+                        break
+                    answer_out.append(data)
+                    data = ""
+
+        return "".join(answer_out), "".join(reason_out), data, in_think
 
     def _format_messages(
         self, messages: list[ChatMessage], system_instruction: str | None = None
@@ -389,10 +540,25 @@ class LangChainModelProvider(ModelProvider):
 
         try:
             lc_messages = self._format_messages(messages, system_instruction)
+            tag_buf = ""
+            in_think = False
             async for chunk in self.chat_model.astream(lc_messages):
-                delta_text = self._extract_text_content(chunk.content)
-                if delta_text:
-                    yield ModelResponseChunk(delta_content=delta_text)
+                raw_text = self._extract_text_content(chunk.content)
+                struct_reasoning = self.extract_chunk_reasoning(chunk)
+                answer_delta, tag_reasoning, tag_buf, in_think = self.split_think_tags_step(
+                    tag_buf, in_think, raw_text
+                )
+                combined_reasoning = struct_reasoning + tag_reasoning
+                if answer_delta or combined_reasoning:
+                    yield ModelResponseChunk(
+                        delta_content=answer_delta,
+                        delta_reasoning=combined_reasoning,
+                    )
+            if tag_buf:
+                if in_think:
+                    yield ModelResponseChunk(delta_content="", delta_reasoning=tag_buf)
+                else:
+                    yield ModelResponseChunk(delta_content=tag_buf, delta_reasoning="")
         except Exception as exc:
             raise ProviderError(
                 message=f"Streaming error ({self.config.provider_id}): {exc}",

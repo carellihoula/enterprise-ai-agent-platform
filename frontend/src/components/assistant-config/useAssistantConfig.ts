@@ -38,6 +38,9 @@ export function useAssistantConfig({
   const [temperature, setTemperature] = useState<number>(
     Math.min(assistantToEdit?.model?.temperature ?? assistantToEdit?.temperature ?? config.temperature ?? 0.7, 1.0),
   );
+  const [enableReasoning, setEnableReasoning] = useState<boolean>(
+    assistantToEdit?.model?.enable_reasoning ?? assistantToEdit?.enable_reasoning ?? config.enableReasoning ?? false,
+  );
   const [systemPrompt, setSystemPrompt] = useState<string>(
     assistantToEdit?.instructions || (assistantToEdit as any)?.system_prompt || config.systemPrompt || "",
   );
@@ -102,6 +105,9 @@ export function useAssistantConfig({
       setSelectedProviderId(provId);
       setActiveModel(modelName);
       setTemperature(temp);
+      setEnableReasoning(
+        assistantToEdit.model?.enable_reasoning ?? assistantToEdit.enable_reasoning ?? false,
+      );
       setSystemPrompt(assistantToEdit.instructions || (assistantToEdit as any).system_prompt || "");
       setIsDefault(assistantToEdit.is_default || false);
       setKnowledge(assistantToEdit.knowledge || []);
@@ -212,8 +218,13 @@ export function useAssistantConfig({
 
   // [Submit Action] Handle Create vs Modify Agent
   const handleSubmitAssistant = async () => {
+    const finalModelName = activeModel || currentModelList[0] || "";
     if (!name.trim()) {
       setValidationError("Please specify an Agent Name");
+      return;
+    }
+    if (!finalModelName) {
+      setValidationError("Please add and select at least one Model ID for this provider");
       return;
     }
     setValidationError(null);
@@ -240,12 +251,11 @@ export function useAssistantConfig({
         }
       }
 
-      const finalModelName = activeModel || currentModelList[0] || "";
-
       const modelPayload = {
         provider_id: selectedProviderId,
         model_name: finalModelName,
         temperature,
+        enable_reasoning: enableReasoning,
         base_url: baseUrlInput,
         api_key: apiKeyToSubmit || undefined,
       };
@@ -280,6 +290,7 @@ export function useAssistantConfig({
         providerId: selectedProviderId,
         modelName: finalModelName,
         temperature,
+        enableReasoning,
         systemPrompt: systemPrompt.trim(),
         baseUrl: baseUrlInput,
         availableModels: currentModelList,
@@ -305,6 +316,7 @@ export function useAssistantConfig({
     selectedProviderId,
     activeModel,
     temperature,
+    enableReasoning,
     systemPrompt,
     knowledge,
     setKnowledge,
@@ -324,6 +336,7 @@ export function useAssistantConfig({
     isSubmitting,
     validationError,
     setTemperature,
+    setEnableReasoning,
     setSystemPrompt,
     setNewModelInput,
     setActiveModel,

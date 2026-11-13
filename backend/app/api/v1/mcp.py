@@ -93,17 +93,24 @@ def _query_scoped_servers(db: Session, agent_id: str | None) -> list[McpServer]:
 
     Args:
         db (Session): Active database session.
-        agent_id (str | None): Optional agent UUID scope, or None for workspace-level servers.
+        agent_id (str | None): Optional agent UUID scope, or None for the global workspace catalog.
 
     Returns:
         list[McpServer]: Ordered list of matching McpServer entities.
     """
     query = db.query(McpServer)
     if agent_id:
-        query = query.filter(McpServer.agent_id == agent_id)
-    else:
-        query = query.filter(McpServer.agent_id.is_(None))
-    return query.order_by(McpServer.sort_order.asc(), McpServer.created_at.asc()).all()
+        return (
+            query.filter(McpServer.agent_id == agent_id)
+            .order_by(McpServer.sort_order.asc(), McpServer.created_at.asc())
+            .all()
+        )
+    # [Global Catalog] Return all workspace servers (including legacy agent-scoped rows)
+    return query.order_by(
+        McpServer.agent_id.is_(None).desc(),
+        McpServer.sort_order.asc(),
+        McpServer.created_at.asc(),
+    ).all()
 
 
 def _sync_agent_mcp_tools(db: Session, agent_id: str, records: list[McpServer]) -> None:

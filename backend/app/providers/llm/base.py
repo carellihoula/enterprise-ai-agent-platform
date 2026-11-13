@@ -52,6 +52,10 @@ class ModelConfig(BaseModel):
     model_name: str = Field(default="", description="Target model version identifier")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
     max_tokens: int | None = Field(default=None, description="Max completion token limit")
+    enable_reasoning: bool = Field(
+        default=False,
+        description="Whether to request native reasoning/thinking tokens from the provider",
+    )
     system_prompt: str | None = Field(default=None, description="System prompt instructions")
     base_url: str | None = Field(default=None, description="Custom HTTP base URL endpoint")
     api_key: str | None = Field(default=None, description="Client API key secret override")
@@ -111,10 +115,12 @@ class ModelResponseChunk(BaseModel):
 
     Attributes:
         delta_content (str): The incremental text chunk generated in this stream step.
+        delta_reasoning (str): The incremental reasoning/thinking text chunk if supported.
         finish_reason (str | None): Optional completion termination reason if stream ended.
     """
 
-    delta_content: str = Field(description="Incremental generated text chunk")
+    delta_content: str = Field(default="", description="Incremental generated text chunk")
+    delta_reasoning: str = Field(default="", description="Incremental reasoning text chunk")
     finish_reason: str | None = Field(default=None, description="Optional stream end reason")
 
 

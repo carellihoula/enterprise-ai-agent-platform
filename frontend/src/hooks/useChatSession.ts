@@ -77,7 +77,11 @@ export function useChatSession({
     try {
       const detail = await fetchSessionDetails(sessionId);
       if (!isMountedRef.current) return;
-      setMessages(detail.messages || []);
+      const hydrated = (detail.messages || []).map((m) => ({
+        ...m,
+        toolCalls: m.toolCalls ?? m.trace_steps,
+      }));
+      setMessages(hydrated);
       // [Sync] Update selected assistant if session was bound to an assistant
       if (detail.assistant_id && onAssistantMatched) {
         onAssistantMatched(detail.assistant_id);
@@ -95,21 +99,12 @@ export function useChatSession({
     }
   };
 
-  const handleNewSession = async (customTitle?: string, assistantIdOverride?: string) => {
+  const handleNewSession = async (_customTitle?: string, _assistantIdOverride?: string) => {
     setErrorMessage(null);
-    try {
-      const targetAssistantId = assistantIdOverride !== undefined ? assistantIdOverride : activeAssistantId;
-      const newSession = await createSession(customTitle || "New Conversation", targetAssistantId);
-      setSessions((prev) => [newSession, ...prev]);
-      setCurrentSessionId(newSession.id);
-      setMessages([]);
-      onSessionSelected?.();
-    } catch (err: any) {
-      toast.error(
-        "Could not start a new conversation session.",
-        "Creation Error",
-      );
-    }
+    // [Lazy Persistence] Reset local draft state; DB session is created only when the user sends a message
+    setCurrentSessionId(null);
+    setMessages([]);
+    onSessionSelected?.();
   };
 
   const handleDeleteSession = async (
@@ -204,7 +199,92 @@ export function useChatSession({
           return updated;
         });
       },
+      onToolEvent: (evt) => {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIndex = updated.length - 1;
+          if (lastIndex < 0 || updated[lastIndex].role !== "assistant") {
+            return prev;
+          }
+          const existing = updated[lastIndex].toolCalls ?? [];
+          let nextCalls = [...existing];
+          if (evt.type === "think_delta" && evt.delta) {
+            const lastStep = nextCalls[nextCalls.length - 1];
+            if (lastStep && lastStep.type === "think" && lastStep.status === "running") {
+              nextCalls[nextCalls.length - 1] = {
+                ...lastStep,
+                text: (lastStep.text ?? "") + evt.delta,
+              };
+            } else {
+              nextCalls.push({
+                id: `think-${nextCalls.length}`,
+                type: "think",
+                name: "Reasoning",
+                status: "running",
+                text: evt.delta,
+              });
+            }
+          } else if (evt.type === "think" && evt.text) {
+            nextCalls.push({
+              id: `think-${nextCalls.length}`,
+              type: "think",
+              name: "Reasoning",
+              status: "done",
+              text: evt.text,
+            });
+          } else if (evt.type === "tool_start" && evt.tool_name) {
+            nextCalls = nextCalls.map((c) =>
+              c.type === "think" && c.status === "running"
+                ? { ...c, status: "done" as const }
+                : c,
+            );
+            nextCalls.push({
+              id: `tool-${nextCalls.length}`,
+              type: "tool",
+              name: evt.tool_name,
+              status: "running",
+              arguments: evt.arguments,
+            });
+          } else if (evt.type === "tool_end" && evt.tool_name) {
+            const idx = nextCalls.findLastIndex(
+              (c) => c.name === evt.tool_name && c.status === "running",
+            );
+            const prevArgs = idx >= 0 ? nextCalls[idx].arguments : undefined;
+            const resolved = {
+              id: idx >= 0 ? nextCalls[idx].id : `tool-${nextCalls.length}`,
+              type: "tool" as const,
+              name: evt.tool_name,
+              status: evt.ok === false ? ("error" as const) : ("done" as const),
+              latencyMs: evt.latency_ms,
+              arguments: prevArgs,
+              output: evt.output,
+            };
+            if (idx >= 0) {
+              nextCalls[idx] = resolved;
+            } else {
+              nextCalls = [...nextCalls, resolved];
+            }
+          }
+          updated[lastIndex] = { ...updated[lastIndex], toolCalls: nextCalls };
+          return updated;
+        });
+      },
       onFinish: () => {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIndex = updated.length - 1;
+          if (lastIndex >= 0 && updated[lastIndex].toolCalls?.length) {
+            updated[lastIndex] = {
+              ...updated[lastIndex],
+              toolCalls: updated[lastIndex].toolCalls?.map((c) =>
+                c.type === "think" && c.status === "running"
+                  ? { ...c, status: "done" as const }
+                  : c,
+              ),
+            };
+          }
+          return updated;
+        });
         setIsStreaming(false);
         abortControllerRef.current = null;
       },

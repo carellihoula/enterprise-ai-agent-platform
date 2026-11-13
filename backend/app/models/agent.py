@@ -28,10 +28,14 @@ class ModelSpec(BaseModel):
     provider_id: str = Field(default="groq", description="Foundational LLM provider identifier")
     model_name: str = Field(..., min_length=1, description="Target foundational model name")
     temperature: float = Field(
-        default=0.7, ge=0.0, le=1.0, description="Sampling temperature parameter"
+        default=0.7, ge=0.0, le=2.0, description="Sampling temperature parameter"
     )
     max_tokens: int | None = Field(
         default=None, gt=0, description="Maximum tokens allowed for model generation"
+    )
+    enable_reasoning: bool = Field(
+        default=False,
+        description="Whether to request native reasoning/thinking tokens from the provider",
     )
     base_url: str | None = Field(
         default=None, max_length=255, description="Custom base URL endpoint for provider"
@@ -115,7 +119,7 @@ class AgentCreate(BaseModel):
         default=None, max_length=255, description="Summary of the agent's specialty"
     )
     instructions: str = Field(
-        ..., min_length=1, description="Primary prompt instructions and behavioral persona"
+        default="", description="Primary prompt instructions and behavioral persona"
     )
     model: ModelSpec = Field(..., description="Foundational model configuration and credentials")
     tools: list[dict[str, Any]] = Field(
@@ -154,7 +158,7 @@ class AgentUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=255)
-    instructions: str | None = Field(default=None, min_length=1)
+    instructions: str | None = Field(default=None)
     model: ModelSpec | None = None
     tools: list[dict[str, Any]] | None = None
     knowledge: list[KnowledgeSource] | None = None

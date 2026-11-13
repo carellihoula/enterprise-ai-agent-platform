@@ -2,11 +2,24 @@
  * Domain types for chat conversations and dynamic model provider configuration.
  */
 
+export interface ToolExecutionBadge {
+  id?: string;
+  type?: "think" | "tool";
+  name: string;
+  status: "running" | "done" | "error";
+  latencyMs?: number;
+  arguments?: Record<string, unknown>;
+  output?: string;
+  text?: string;
+}
+
 export interface Message {
   id?: string;
   role: "user" | "assistant" | "system";
   content: string;
   created_at?: string;
+  toolCalls?: ToolExecutionBadge[];
+  trace_steps?: ToolExecutionBadge[];
 }
 
 export interface Session {
@@ -23,6 +36,7 @@ export interface ModelConfigState {
   modelName: string;
   temperature: number;
   maxTokens?: number;
+  enableReasoning?: boolean;
   systemPrompt?: string;
   baseUrl?: string;
   apiKey?: string;

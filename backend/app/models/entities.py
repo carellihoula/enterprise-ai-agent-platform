@@ -8,7 +8,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -66,6 +66,9 @@ class Agent(Base):
     model_name: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     temperature: Mapped[float] = mapped_column(Float, nullable=False, default=0.7)
     max_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    enable_reasoning: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default=false()
+    )
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -143,6 +146,9 @@ class SessionMessage(Base):
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    trace_steps: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=current_utc_time)
 
     # [Relationship] Reference to parent ConversationSession

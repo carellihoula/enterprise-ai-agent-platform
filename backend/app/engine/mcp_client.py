@@ -12,7 +12,8 @@ import shutil
 import socket
 import tempfile
 import time
-from typing import Any, TextIO, cast
+from collections.abc import Awaitable, Callable
+from typing import Any, TextIO, TypeVar, cast
 from urllib.parse import urlparse
 
 from mcp import ClientSession
@@ -100,8 +101,9 @@ def _build_sandbox_docker_args(payload: McpServerPayload) -> list[str]:
         "-i",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
-        "--pids-limit=64",
-        "--memory=512m",
+        # [Browser Support] Chromium spawns dozens of threads/subprocesses; 256 PIDs & 1GB prevent pthread_create failures
+        "--pids-limit=256",
+        "--memory=1024m",
         "--cpus=1",
         "--user=nobody",
         "-v",
@@ -172,6 +174,9 @@ def _format_http_diagnostic(status_code: int, reason: str, body_preview: str) ->
     return " — ".join(parts)
 
 
+T = TypeVar("T")
+
+
 async def _run_session_handshake(read_stream: object, write_stream: object) -> list[McpToolInfo]:
     """Executes the MCP initialization handshake and queries available tools on an open transport.
 
@@ -182,41 +187,77 @@ async def _run_session_handshake(read_stream: object, write_stream: object) -> l
     Returns:
         list[McpToolInfo]: Discovered tools with names and descriptions.
     """
+    return await _run_session_with_callback(read_stream, write_stream, _list_tools_from_session)
+
+
+async def _list_tools_from_session(session: ClientSession) -> list[McpToolInfo]:
+    """Queries tool descriptors from an initialized MCP ClientSession.
+
+    Args:
+        session (ClientSession): Initialized MCP session.
+
+    Returns:
+        list[McpToolInfo]: Discovered tools with names and descriptions.
+    """
+    try:
+        # [Capability Discovery] Fetch tool list if the server exposes the tools capability
+        tools_result = await session.list_tools()
+        return [
+            McpToolInfo(
+                name=t.name,
+                description=(getattr(t, "description", None) or "").strip(),
+            )
+            for t in getattr(tools_result, "tools", [])
+        ]
+    except Exception:
+        # [Graceful Fallback] Some MCP servers only expose prompts or resources without tools
+        return []
+
+
+async def _run_session_with_callback(
+    read_stream: object,
+    write_stream: object,
+    callback: Callable[[ClientSession], Awaitable[T]],
+) -> T:
+    """Initializes an MCP ClientSession and invokes the supplied async callback.
+
+    Args:
+        read_stream (object): MCP transport receive stream.
+        write_stream (object): MCP transport send stream.
+        callback (Callable[[ClientSession], Awaitable[T]]): Operation to execute on the session.
+
+    Returns:
+        T: Result returned by the callback.
+    """
     async with ClientSession(read_stream, write_stream) as session:  # type: ignore[arg-type]
         await session.initialize()
-        try:
-            # [Capability Discovery] Fetch tool list if the server exposes the tools capability
-            tools_result = await session.list_tools()
-            return [
-                McpToolInfo(
-                    name=t.name,
-                    description=(getattr(t, "description", None) or "").strip(),
-                )
-                for t in getattr(tools_result, "tools", [])
-            ]
-        except Exception:
-            # [Graceful Fallback] Some MCP servers only expose prompts or resources without tools
-            return []
+        return await callback(session)
 
 
 async def _probe_transport(
     payload: McpServerPayload,
     diagnostics: dict[str, Any],
-) -> list[McpToolInfo]:
+    callback: Callable[[ClientSession], Awaitable[T]] | None = None,
+) -> Any:
     """Opens the configured MCP transport and performs the protocol handshake.
 
     Args:
         payload (McpServerPayload): Validated MCP server configuration payload.
         diagnostics (dict[str, Any]): Mutable dictionary used to capture HTTP or stderr details.
+        callback (Callable[[ClientSession], Awaitable[T]] | None, optional): Optional session callback.
+            Defaults to listing tool info.
 
     Returns:
-        list[str]: Discovered tool names upon successful connection.
+        Any: Result returned by the session callback.
 
     Raises:
         FileNotFoundError: If Docker CLI is unavailable on the host for stdio sandboxing.
         ValueError: If a remote URL fails SSRF validation.
         Exception: If transport connection or MCP initialization fails.
     """
+    effective_cb: Callable[[ClientSession], Awaitable[Any]] = (
+        callback if callback is not None else _list_tools_from_session
+    )
     if payload.type == "stdio":
         docker_bin = shutil.which("docker")
         if not docker_bin:
@@ -236,7 +277,7 @@ async def _probe_transport(
                     read_stream,
                     write_stream,
                 ):
-                    return await _run_session_handshake(read_stream, write_stream)
+                    return await _run_session_with_callback(read_stream, write_stream, effective_cb)
             finally:
                 err_file.seek(0)
                 stderr_text = err_file.read().strip()
@@ -282,7 +323,7 @@ async def _probe_transport(
             sse_read_timeout=10.0,
             httpx_client_factory=_http_client_factory,
         ) as (read_stream, write_stream):
-            return await _run_session_handshake(read_stream, write_stream)
+            return await _run_session_with_callback(read_stream, write_stream, effective_cb)
 
     # [Streamable HTTP] Use instrumented MCP HTTP client to capture exact HTTP status on failure
     http_client = _http_client_factory(headers=resolved_headers or None)
@@ -290,7 +331,7 @@ async def _probe_transport(
         payload.url,
         http_client=http_client,
     ) as (read_stream, write_stream):
-        return await _run_session_handshake(read_stream, write_stream)
+        return await _run_session_with_callback(read_stream, write_stream, effective_cb)
 
 
 async def probe_mcp_server(
@@ -357,3 +398,86 @@ async def probe_mcp_server(
             tools=[],
             latency_ms=elapsed_ms,
         )
+
+
+async def list_mcp_tool_schemas(
+    payload: McpServerPayload,
+    timeout_seconds: float | None = None,
+) -> list[dict[str, Any]]:
+    """Discovers full MCP tool schemas (name, description, inputSchema) from a server.
+
+    Args:
+        payload (McpServerPayload): MCP server configuration payload.
+        timeout_seconds (float | None, optional): Maximum time allowed for discovery.
+
+    Returns:
+        list[dict[str, Any]]: List of tool schema dicts.
+    """
+    effective_timeout = (
+        timeout_seconds
+        if timeout_seconds is not None
+        else (60.0 if payload.type == "stdio" else 15.0)
+    )
+
+    async def _discover(session: ClientSession) -> list[dict[str, Any]]:
+        tools_result = await session.list_tools()
+        return [
+            {
+                "name": t.name,
+                "description": (getattr(t, "description", None) or "").strip(),
+                "inputSchema": getattr(t, "inputSchema", None)
+                or {"type": "object", "properties": {}},
+            }
+            for t in getattr(tools_result, "tools", [])
+        ]
+
+    diagnostics: dict[str, Any] = {}
+    return cast(
+        list[dict[str, Any]],
+        await asyncio.wait_for(
+            _probe_transport(payload, diagnostics, _discover),
+            timeout=effective_timeout,
+        ),
+    )
+
+
+async def call_mcp_tool(
+    payload: McpServerPayload,
+    tool_name: str,
+    arguments: dict[str, Any],
+    timeout_seconds: float = 30.0,
+) -> str:
+    """Executes a single tool call on an MCP server and returns text output.
+
+    Args:
+        payload (McpServerPayload): MCP server configuration payload.
+        tool_name (str): Exact tool identifier exposed by the MCP server.
+        arguments (dict[str, Any]): JSON arguments matching the tool's inputSchema.
+        timeout_seconds (float, optional): Execution timeout in seconds. Defaults to 30.0.
+
+    Returns:
+        str: Serialized tool execution output text.
+    """
+
+    async def _invoke(session: ClientSession) -> str:
+        result = await session.call_tool(tool_name, arguments=arguments)
+        parts: list[str] = []
+        for item in getattr(result, "content", []) or []:
+            text = getattr(item, "text", None)
+            if text is not None:
+                parts.append(str(text))
+            else:
+                parts.append(str(item))
+        output_text = "\n".join(parts) if parts else str(result)
+        if getattr(result, "isError", False):
+            raise RuntimeError(output_text or f"MCP tool '{tool_name}' returned an error.")
+        return output_text
+
+    diagnostics: dict[str, Any] = {}
+    return cast(
+        str,
+        await asyncio.wait_for(
+            _probe_transport(payload, diagnostics, _invoke),
+            timeout=timeout_seconds,
+        ),
+    )

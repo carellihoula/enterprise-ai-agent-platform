@@ -21,9 +21,7 @@ export interface McpConfigViewProps {
  * Top-level orchestrator view for configuring Model Context Protocol (MCP) servers
  * with synchronized Form and JSON editing modes.
  */
-export const McpConfigView: React.FC<McpConfigViewProps> = ({
-  activeAgent,
-}) => {
+export const McpConfigView: React.FC<McpConfigViewProps> = () => {
   const {
     servers,
     mode,
@@ -49,7 +47,7 @@ export const McpConfigView: React.FC<McpConfigViewProps> = ({
     testServerConnection,
     handleSave,
     handleRevert,
-  } = useMcpConfig({ agentId: activeAgent?.id });
+  } = useMcpConfig();
 
   const handleAddAndFocus = () => {
     const newId = addServer();

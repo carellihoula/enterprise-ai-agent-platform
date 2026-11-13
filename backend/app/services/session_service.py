@@ -76,13 +76,21 @@ class SessionService:
             )
         return db_session
 
-    def add_message(self, session_id: str, role: str, content: str) -> SessionMessage:
+    def add_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        trace_steps: list[dict[str, object]] | None = None,
+    ) -> SessionMessage:
         """Appends a new message to an existing conversation session.
 
         Args:
             session_id (str): Target session UUID string identifier.
             role (str): Message author role (system, user, assistant, tool).
             content (str): Textual content of the message.
+            trace_steps (list[dict[str, object]] | None, optional): Optional reasoning and tool
+                execution trace steps associated with an assistant message.
 
         Returns:
             SessionMessage: Newly created message ORM instance.
@@ -94,7 +102,12 @@ class SessionService:
         db_session = self.get_session(session_id)
 
         # [Persistence] Instantiate and attach new message
-        message = SessionMessage(session_id=db_session.id, role=role, content=content)
+        message = SessionMessage(
+            session_id=db_session.id,
+            role=role,
+            content=content,
+            trace_steps=trace_steps,
+        )
         self.db.add(message)
 
         # [Update] Touch parent session updated_at timestamp

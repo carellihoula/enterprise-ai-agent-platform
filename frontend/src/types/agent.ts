@@ -7,6 +7,7 @@ export interface ModelSpec {
   model_name: string;
   temperature: number;
   max_tokens?: number | null;
+  enable_reasoning?: boolean;
   base_url?: string | null;
   api_key?: string | null;
 }
@@ -37,6 +38,7 @@ export interface Agent {
   provider_id?: string;
   model_name?: string;
   temperature?: number;
+  enable_reasoning?: boolean;
   system_prompt?: string | null;
   masked_api_key?: string | null;
   base_url?: string | null;

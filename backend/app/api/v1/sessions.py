@@ -5,7 +5,7 @@ conversation sessions, as well as viewing message history within a session.
 """
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
@@ -44,6 +44,9 @@ class SessionMessageResponse(BaseModel):
     session_id: str = Field(description="Parent session identifier")
     role: str = Field(description="Role of the message author")
     content: str = Field(description="Textual content of the message")
+    trace_steps: list[dict[str, Any]] | None = Field(
+        default=None, description="Persisted reasoning and tool execution trace steps"
+    )
     created_at: datetime = Field(description="Timestamp when message was created")
 
 
@@ -162,6 +165,7 @@ async def get_session(
                 session_id=m.session_id,
                 role=m.role,
                 content=m.content,
+                trace_steps=m.trace_steps,
                 created_at=m.created_at,
             )
             for m in session.messages

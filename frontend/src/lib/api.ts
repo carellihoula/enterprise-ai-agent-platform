@@ -56,6 +56,17 @@ export async function deleteSession(sessionId: string): Promise<void> {
   }
 }
 
+export interface ChatToolEvent {
+  type: 'tool_start' | 'tool_end' | 'think' | 'think_delta';
+  tool_name?: string;
+  ok?: boolean;
+  latency_ms?: number;
+  arguments?: Record<string, unknown>;
+  output?: string;
+  text?: string;
+  delta?: string;
+}
+
 export interface StreamChatParams {
   sessionId?: string;
   assistantId?: string;
@@ -69,6 +80,7 @@ export interface StreamChatParams {
   baseUrl?: string;
   abortSignal?: AbortSignal;
   onChunk: (delta: string) => void;
+  onToolEvent?: (event: ChatToolEvent) => void;
   onFinish?: () => void;
   onError?: (error: Error) => void;
 }
@@ -86,6 +98,7 @@ export async function streamChatCompletion({
   baseUrl,
   abortSignal,
   onChunk,
+  onToolEvent,
   onFinish,
   onError,
 }: StreamChatParams): Promise<void> {
@@ -145,6 +158,8 @@ export async function streamChatCompletion({
             const parsed = JSON.parse(dataStr);
             if (parsed.error) {
               streamError = new Error(parsed.error);
+            } else if (parsed.tool_event) {
+              onToolEvent?.(parsed.tool_event as ChatToolEvent);
             } else if (parsed.delta_content !== undefined && parsed.delta_content !== null) {
               // [Parsing] Normalize any serialized content blocks to pure text
               const rawDelta = String(parsed.delta_content);

@@ -19,6 +19,7 @@ import {
   ProviderCredentials,
   ModelListManager,
   TemperatureSlider,
+  ReasoningToggle,
   SystemPromptEditor,
   ToolsEditor,
   PoliciesEditor,
@@ -48,6 +49,7 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
     selectedProviderId,
     activeModel,
     temperature,
+    enableReasoning,
     systemPrompt,
     knowledge,
     setKnowledge,
@@ -67,6 +69,7 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
     isSubmitting,
     validationError,
     setTemperature,
+    setEnableReasoning,
     setSystemPrompt,
     setNewModelInput,
     setActiveModel,
@@ -145,6 +148,12 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
         <TemperatureSlider
           temperature={temperature}
           onTemperatureChange={setTemperature}
+        />
+
+        {/* 5b. Native Reasoning Toggle */}
+        <ReasoningToggle
+          enabled={enableReasoning}
+          onChange={setEnableReasoning}
         />
 
         {/* 6. System Instructions */}

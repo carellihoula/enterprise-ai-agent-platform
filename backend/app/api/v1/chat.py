@@ -7,7 +7,7 @@ with LLM providers behind the ModelProvider abstraction layer.
 import json
 import logging
 from collections.abc import AsyncGenerator
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import SessionLocal, get_db
 from app.core.security import decrypt_api_key
+from app.engine.langchain_tools import build_langchain_tools_for_agent, run_agent_tool_loop
 from app.models.entities import Agent
 from app.providers.llm.base import (
     ChatMessage,
@@ -25,7 +26,7 @@ from app.providers.llm.base import (
     ModelProvider,
     ModelResponse,
 )
-from app.providers.llm.langchain_provider import ProviderAdapterRegistry
+from app.providers.llm.langchain_provider import LangChainModelProvider, ProviderAdapterRegistry
 from app.services.session_service import SessionService
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,10 @@ class ChatRequest(BaseModel):
     model_name: str = Field(default="", description="Target model version identifier")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
     max_tokens: int | None = Field(default=None, description="Max completion tokens limit")
+    enable_reasoning: bool | None = Field(
+        default=None,
+        description="Optional override to request native reasoning/thinking tokens",
+    )
     system_instruction: str | None = Field(default=None, description="System prompt instructions")
     session_id: str | None = Field(default=None, description="Optional session ID for persistence")
     agent_id: str | None = Field(default=None, description="Optional target agent identifier")
@@ -92,6 +97,7 @@ def _get_provider(
     temperature: float = 0.7,
     max_tokens: int | None = None,
     system_instruction: str | None = None,
+    enable_reasoning: bool = False,
 ) -> ModelProvider:
     """Factory helper to instantiate a concrete ModelProvider instance via ProviderAdapterRegistry.
 
@@ -103,6 +109,7 @@ def _get_provider(
         temperature (float): Sampling temperature value.
         max_tokens (int | None): Max token generation limit.
         system_instruction (str | None): Optional system prompt text.
+        enable_reasoning (bool): Whether to request native reasoning/thinking tokens.
 
     Returns:
         ModelProvider: Instantiated model provider.
@@ -112,6 +119,7 @@ def _get_provider(
         model_name=model_name,
         temperature=temperature,
         max_tokens=max_tokens,
+        enable_reasoning=enable_reasoning,
         system_prompt=system_instruction,
         base_url=base_url,
         api_key=api_key,
@@ -229,6 +237,90 @@ def _resolve_provider_credentials(
     return api_key, base_url, system_instruction
 
 
+def _resolve_target_agent(request: ChatRequest, db: Session) -> Agent | None:
+    """Resolves the target Agent ORM entity for a chat request if specified.
+
+    Args:
+        request (ChatRequest): Incoming chat request payload.
+        db (Session): Active database session.
+
+    Returns:
+        Agent | None: Matched Agent ORM record, or None.
+    """
+    target_agent_id = request.agent_id or request.assistant_id
+    if target_agent_id:
+        return db.query(Agent).filter(Agent.id == target_agent_id).first()
+    if request.provider_name:
+        return (
+            db.query(Agent)
+            .filter(Agent.provider_id == request.provider_name.lower().strip())
+            .first()
+        )
+    return None
+
+
+def _record_trace_event(recorded_steps: list[dict[str, Any]], evt: dict[str, Any]) -> None:
+    """Appends or updates a trace step dictionary from an agent loop lifecycle event.
+
+    Args:
+        recorded_steps (list[dict[str, Any]]): Mutable list of trace steps to persist.
+        evt (dict[str, Any]): Event payload emitted by run_agent_tool_loop.
+    """
+    evt_type = evt.get("type")
+    if evt_type == "think_delta" and evt.get("delta"):
+        delta = str(evt["delta"])
+        if recorded_steps and recorded_steps[-1].get("type") == "think":
+            recorded_steps[-1]["text"] = str(recorded_steps[-1].get("text") or "") + delta
+        else:
+            recorded_steps.append(
+                {
+                    "id": f"think-{len(recorded_steps)}",
+                    "type": "think",
+                    "name": "Reasoning",
+                    "status": "done",
+                    "text": delta,
+                }
+            )
+    elif evt_type == "think" and evt.get("text"):
+        recorded_steps.append(
+            {
+                "id": f"think-{len(recorded_steps)}",
+                "type": "think",
+                "name": "Reasoning",
+                "status": "done",
+                "text": str(evt["text"]),
+            }
+        )
+    elif evt_type == "tool_start" and evt.get("tool_name"):
+        recorded_steps.append(
+            {
+                "id": f"tool-{len(recorded_steps)}",
+                "type": "tool",
+                "name": str(evt["tool_name"]),
+                "status": "running",
+                "arguments": evt.get("arguments") or {},
+            }
+        )
+    elif evt_type == "tool_end" and evt.get("tool_name"):
+        tool_name = str(evt["tool_name"])
+        for step in reversed(recorded_steps):
+            if step.get("name") == tool_name and step.get("status") == "running":
+                step["status"] = "error" if evt.get("ok") is False else "done"
+                step["latencyMs"] = evt.get("latency_ms")
+                step["output"] = evt.get("output")
+                return
+        recorded_steps.append(
+            {
+                "id": f"tool-{len(recorded_steps)}",
+                "type": "tool",
+                "name": tool_name,
+                "status": "error" if evt.get("ok") is False else "done",
+                "latencyMs": evt.get("latency_ms"),
+                "output": evt.get("output"),
+            }
+        )
+
+
 @router.post("", response_model=ChatResponse, status_code=status.HTTP_200_OK)
 async def generate_chat(
     request: ChatRequest,
@@ -250,6 +342,12 @@ async def generate_chat(
     resolved_api_key, resolved_base_url, resolved_system_prompt = _resolve_provider_credentials(
         request, db
     )
+    target_agent = _resolve_target_agent(request, db)
+    resolved_enable_reasoning = (
+        request.enable_reasoning
+        if request.enable_reasoning is not None
+        else (target_agent.enable_reasoning if target_agent else False)
+    )
     provider = _get_provider(
         request.provider_name,
         request.model_name,
@@ -258,10 +356,41 @@ async def generate_chat(
         temperature=request.temperature,
         max_tokens=request.max_tokens,
         system_instruction=resolved_system_prompt,
+        enable_reasoning=resolved_enable_reasoning,
     )
     full_messages, target_session_id = _prepare_messages_context(
         request.messages, request.session_id, db
     )
+    agent_tools = await build_langchain_tools_for_agent(target_agent, db)
+
+    if agent_tools and isinstance(provider, LangChainModelProvider):
+        lc_messages = provider._format_messages(full_messages, resolved_system_prompt)
+        collected_parts: list[str] = []
+        recorded_steps: list[dict[str, Any]] = []
+        async for evt in run_agent_tool_loop(provider.chat_model, lc_messages, agent_tools):
+            if evt.get("type") == "token":
+                collected_parts.append(str(evt.get("delta_content", "")))
+            else:
+                _record_trace_event(recorded_steps, evt)
+        final_text = "".join(collected_parts)
+        if target_session_id:
+            service = SessionService(db)
+            for msg in request.messages:
+                service.add_message(target_session_id, msg.role, msg.content)
+            service.add_message(
+                target_session_id,
+                "assistant",
+                final_text,
+                trace_steps=recorded_steps or None,
+            )
+        return ChatResponse(
+            content=final_text,
+            provider_name=request.provider_name,
+            model_name=request.model_name,
+            usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            finish_reason="stop",
+            session_id=target_session_id,
+        )
 
     model_response: ModelResponse = await provider.generate(
         messages=full_messages,
@@ -308,6 +437,12 @@ async def stream_chat(
     resolved_api_key, resolved_base_url, resolved_system_prompt = _resolve_provider_credentials(
         request, db
     )
+    target_agent = _resolve_target_agent(request, db)
+    resolved_enable_reasoning = (
+        request.enable_reasoning
+        if request.enable_reasoning is not None
+        else (target_agent.enable_reasoning if target_agent else False)
+    )
     provider = _get_provider(
         request.provider_name,
         request.model_name,
@@ -316,41 +451,73 @@ async def stream_chat(
         temperature=request.temperature,
         max_tokens=request.max_tokens,
         system_instruction=resolved_system_prompt,
+        enable_reasoning=resolved_enable_reasoning,
     )
     full_messages, target_session_id = _prepare_messages_context(
         request.messages, request.session_id, db
     )
+    agent_tools = await build_langchain_tools_for_agent(target_agent, db)
 
     async def event_generator() -> AsyncGenerator[str, None]:
         """Async generator formatting chunks into SSE event lines and persisting messages."""
         accumulated_content = ""
+        recorded_steps: list[dict[str, Any]] = []
         logger.info(
             f"[Stream] Starting stream for provider='{request.provider_name}', model='{request.model_name}'"
         )
         try:
-            async for chunk in provider.stream(
-                messages=full_messages,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                system_instruction=request.system_instruction,
-            ):
-                accumulated_content += chunk.delta_content
-                payload = {
-                    "delta_content": chunk.delta_content,
-                    "finish_reason": chunk.finish_reason,
-                }
-                yield f"data: {json.dumps(payload)}\n\n"
+            if agent_tools and isinstance(provider, LangChainModelProvider):
+                lc_messages = provider._format_messages(full_messages, resolved_system_prompt)
+                async for evt in run_agent_tool_loop(provider.chat_model, lc_messages, agent_tools):
+                    evt_type = evt.get("type")
+                    if evt_type in ("tool_start", "tool_end", "think", "think_delta"):
+                        _record_trace_event(recorded_steps, evt)
+                        yield f"data: {json.dumps({'tool_event': evt})}\n\n"
+                    elif evt_type == "token":
+                        delta = str(evt.get("delta_content", ""))
+                        accumulated_content += delta
+                        stream_payload: dict[str, Any] = {
+                            "delta_content": delta,
+                            "finish_reason": "stop",
+                        }
+                        yield f"data: {json.dumps(stream_payload)}\n\n"
+            else:
+                async for chunk in provider.stream(
+                    messages=full_messages,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens,
+                    system_instruction=resolved_system_prompt,
+                ):
+                    if chunk.delta_reasoning:
+                        think_evt: dict[str, Any] = {
+                            "type": "think_delta",
+                            "delta": chunk.delta_reasoning,
+                        }
+                        _record_trace_event(recorded_steps, think_evt)
+                        yield f"data: {json.dumps({'tool_event': think_evt})}\n\n"
+                    if chunk.delta_content:
+                        accumulated_content += chunk.delta_content
+                        stream_payload = {
+                            "delta_content": chunk.delta_content,
+                            "finish_reason": chunk.finish_reason,
+                        }
+                        yield f"data: {json.dumps(stream_payload)}\n\n"
 
             logger.info(f"[Stream] Stream completed. Generated length={len(accumulated_content)}")
 
             # [Persistence] Store complete conversation exchange after stream finishes using dedicated DB session
-            if target_session_id and accumulated_content:
+            if target_session_id and (accumulated_content or recorded_steps):
                 db_session = SessionLocal()
                 try:
                     service = SessionService(db_session)
                     for msg in request.messages:
                         service.add_message(target_session_id, msg.role, msg.content)
-                    service.add_message(target_session_id, "assistant", accumulated_content)
+                    service.add_message(
+                        target_session_id,
+                        "assistant",
+                        accumulated_content,
+                        trace_steps=recorded_steps or None,
+                    )
                     logger.info(f"[Stream] Saved messages to session_id='{target_session_id}'")
                 finally:
                     db_session.close()

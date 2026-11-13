@@ -41,6 +41,7 @@ def _to_response(agent: Agent) -> AgentResponse:
         model_name=agent.model_name,
         temperature=agent.temperature,
         max_tokens=agent.max_tokens,
+        enable_reasoning=agent.enable_reasoning,
         base_url=agent.base_url,
         api_key=masked_key,
     )
@@ -120,6 +121,7 @@ def create_agent(
         model_name=payload.model.model_name.strip(),
         temperature=payload.model.temperature,
         max_tokens=payload.model.max_tokens,
+        enable_reasoning=payload.model.enable_reasoning,
         api_key_encrypted=encrypted_key,
         base_url=payload.model.base_url.strip() if payload.model.base_url else None,
         is_default=payload.is_default,
@@ -209,6 +211,7 @@ def update_agent(
             record.model_name = payload.model.model_name.strip()
         record.temperature = payload.model.temperature
         record.max_tokens = payload.model.max_tokens
+        record.enable_reasoning = payload.model.enable_reasoning
         if payload.model.base_url is not None:
             record.base_url = payload.model.base_url.strip() or None
         if payload.model.api_key is not None:

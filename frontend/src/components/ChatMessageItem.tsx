@@ -17,6 +17,7 @@ import {
   ThumbsDown,
   RotateCcw,
 } from 'lucide-react';
+import { AgentTrace } from '@/components/chat';
 import { Button } from '@/components/ui/button';
 import { cn, cleanSerializedContentBlocks } from '@/lib/utils';
 
@@ -82,6 +83,7 @@ const BaseChatMessageItem: React.FC<ChatMessageItemProps> = ({
         ) : (
           /* Assistant Message Layout: Left-Aligned Rich Canvas */
           <div className="w-full space-y-1.5 min-w-0">
+            <AgentTrace steps={message.toolCalls} isStreaming={isStreaming} />
             {/* Rich Markdown & Table Content */}
             <div className="min-w-0">
               <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
