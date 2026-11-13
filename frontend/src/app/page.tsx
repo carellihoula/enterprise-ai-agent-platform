@@ -199,6 +199,11 @@ export default function EnterpriseAppPage() {
                 onRetryLastMessage={handleRetryLastMessage}
                 onOpenAssistantPicker={() => setIsAgentPickerOpen(true)}
                 activeAssistantName={activeAgent?.name}
+                enableReasoning={Boolean(modelConfig.enableReasoning)}
+                reasoningEffort={modelConfig.reasoningEffort ?? "low"}
+                onReasoningEffortChange={(effort) =>
+                  handleUpdateModelConfig({ ...modelConfig, reasoningEffort: effort })
+                }
               />
             </>
           )}

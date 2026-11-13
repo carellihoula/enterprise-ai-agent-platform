@@ -8,7 +8,7 @@ via standard synchronous, streaming, info, and health-checking interfaces.
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -55,6 +55,10 @@ class ModelConfig(BaseModel):
     enable_reasoning: bool = Field(
         default=False,
         description="Whether to request native reasoning/thinking tokens from the provider",
+    )
+    reasoning_effort: Literal["low", "medium", "high"] = Field(
+        default="low",
+        description="Reasoning depth level (low, medium, high) when reasoning is enabled",
     )
     system_prompt: str | None = Field(default=None, description="System prompt instructions")
     base_url: str | None = Field(default=None, description="Custom HTTP base URL endpoint")

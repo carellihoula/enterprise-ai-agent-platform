@@ -50,6 +50,7 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
     activeModel,
     temperature,
     enableReasoning,
+    reasoningEffort,
     systemPrompt,
     knowledge,
     setKnowledge,
@@ -70,6 +71,7 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
     validationError,
     setTemperature,
     setEnableReasoning,
+    setReasoningEffort,
     setSystemPrompt,
     setNewModelInput,
     setActiveModel,
@@ -150,10 +152,12 @@ export const AssistantConfigView: React.FC<AssistantConfigViewProps> = ({
           onTemperatureChange={setTemperature}
         />
 
-        {/* 5b. Native Reasoning Toggle */}
+        {/* 5b. Native Reasoning Toggle & Default Effort */}
         <ReasoningToggle
           enabled={enableReasoning}
           onChange={setEnableReasoning}
+          effort={reasoningEffort}
+          onEffortChange={setReasoningEffort}
         />
 
         {/* 6. System Instructions */}

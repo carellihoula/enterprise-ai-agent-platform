@@ -37,6 +37,7 @@ export interface ModelConfigState {
   temperature: number;
   maxTokens?: number;
   enableReasoning?: boolean;
+  reasoningEffort?: "low" | "medium" | "high";
   systemPrompt?: string;
   baseUrl?: string;
   apiKey?: string;

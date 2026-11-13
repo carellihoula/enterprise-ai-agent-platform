@@ -2,12 +2,15 @@
  * Data contracts and schemas for Enterprise AI Agents catalog.
  */
 
+export type ReasoningEffort = "low" | "medium" | "high";
+
 export interface ModelSpec {
   provider_id: string;
   model_name: string;
   temperature: number;
   max_tokens?: number | null;
   enable_reasoning?: boolean;
+  reasoning_effort?: ReasoningEffort;
   base_url?: string | null;
   api_key?: string | null;
 }
@@ -39,6 +42,7 @@ export interface Agent {
   model_name?: string;
   temperature?: number;
   enable_reasoning?: boolean;
+  reasoning_effort?: ReasoningEffort;
   system_prompt?: string | null;
   masked_api_key?: string | null;
   base_url?: string | null;

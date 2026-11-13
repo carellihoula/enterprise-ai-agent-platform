@@ -69,6 +69,9 @@ class Agent(Base):
     enable_reasoning: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default=false()
     )
+    reasoning_effort: Mapped[str] = mapped_column(
+        String(16), default="low", nullable=False, server_default="low"
+    )
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

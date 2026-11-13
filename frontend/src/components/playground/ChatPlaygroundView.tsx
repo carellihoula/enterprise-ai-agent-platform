@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from "react";
 import { Message } from "@/types/chat";
+import { ReasoningEffort } from "@/types/agent";
 import { ChatMessageItem } from "@/components/ChatMessageItem";
 import { ChatInput } from "@/components/ChatInput";
 import { Sparkles } from "lucide-react";
@@ -14,6 +15,9 @@ interface ChatPlaygroundViewProps {
   onRetryLastMessage: () => void;
   onOpenAssistantPicker?: () => void;
   activeAssistantName?: string;
+  enableReasoning?: boolean;
+  reasoningEffort?: ReasoningEffort;
+  onReasoningEffortChange?: (effort: ReasoningEffort) => void;
 }
 
 /**
@@ -28,6 +32,9 @@ export const ChatPlaygroundView: React.FC<ChatPlaygroundViewProps> = ({
   onRetryLastMessage,
   onOpenAssistantPicker,
   activeAssistantName,
+  enableReasoning = false,
+  reasoningEffort = "low",
+  onReasoningEffortChange,
 }) => {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUpRef = useRef<boolean>(false);
@@ -90,6 +97,9 @@ export const ChatPlaygroundView: React.FC<ChatPlaygroundViewProps> = ({
         onStopStreaming={onStopStreaming}
         onOpenAssistantPicker={onOpenAssistantPicker}
         activeAssistantName={activeAssistantName}
+        enableReasoning={enableReasoning}
+        reasoningEffort={reasoningEffort}
+        onReasoningEffortChange={onReasoningEffortChange}
       />
     </>
   );

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { ModelConfigState } from "@/types/chat";
-import { Agent, AgentCreatePayload, AgentUpdatePayload, KnowledgeSource } from "@/types/agent";
+import { Agent, AgentCreatePayload, AgentUpdatePayload, KnowledgeSource, ReasoningEffort } from "@/types/agent";
 import { SUPPORTED_PROVIDERS, ProviderDefinition } from "./types";
 
 interface UseAssistantConfigProps {
@@ -40,6 +40,9 @@ export function useAssistantConfig({
   );
   const [enableReasoning, setEnableReasoning] = useState<boolean>(
     assistantToEdit?.model?.enable_reasoning ?? assistantToEdit?.enable_reasoning ?? config.enableReasoning ?? false,
+  );
+  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(
+    assistantToEdit?.model?.reasoning_effort ?? assistantToEdit?.reasoning_effort ?? config.reasoningEffort ?? "low",
   );
   const [systemPrompt, setSystemPrompt] = useState<string>(
     assistantToEdit?.instructions || (assistantToEdit as any)?.system_prompt || config.systemPrompt || "",
@@ -107,6 +110,9 @@ export function useAssistantConfig({
       setTemperature(temp);
       setEnableReasoning(
         assistantToEdit.model?.enable_reasoning ?? assistantToEdit.enable_reasoning ?? false,
+      );
+      setReasoningEffort(
+        assistantToEdit.model?.reasoning_effort ?? assistantToEdit.reasoning_effort ?? "low",
       );
       setSystemPrompt(assistantToEdit.instructions || (assistantToEdit as any).system_prompt || "");
       setIsDefault(assistantToEdit.is_default || false);
@@ -256,6 +262,7 @@ export function useAssistantConfig({
         model_name: finalModelName,
         temperature,
         enable_reasoning: enableReasoning,
+        reasoning_effort: reasoningEffort,
         base_url: baseUrlInput,
         api_key: apiKeyToSubmit || undefined,
       };
@@ -291,6 +298,7 @@ export function useAssistantConfig({
         modelName: finalModelName,
         temperature,
         enableReasoning,
+        reasoningEffort,
         systemPrompt: systemPrompt.trim(),
         baseUrl: baseUrlInput,
         availableModels: currentModelList,
@@ -317,6 +325,7 @@ export function useAssistantConfig({
     activeModel,
     temperature,
     enableReasoning,
+    reasoningEffort,
     systemPrompt,
     knowledge,
     setKnowledge,
@@ -337,6 +346,7 @@ export function useAssistantConfig({
     validationError,
     setTemperature,
     setEnableReasoning,
+    setReasoningEffort,
     setSystemPrompt,
     setNewModelInput,
     setActiveModel,

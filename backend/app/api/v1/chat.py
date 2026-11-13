@@ -7,7 +7,7 @@ with LLM providers behind the ModelProvider abstraction layer.
 import json
 import logging
 from collections.abc import AsyncGenerator
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
@@ -61,6 +61,10 @@ class ChatRequest(BaseModel):
         default=None,
         description="Optional override to request native reasoning/thinking tokens",
     )
+    reasoning_effort: Literal["low", "medium", "high"] | None = Field(
+        default=None,
+        description="Optional override for reasoning depth (low, medium, high)",
+    )
     system_instruction: str | None = Field(default=None, description="System prompt instructions")
     session_id: str | None = Field(default=None, description="Optional session ID for persistence")
     agent_id: str | None = Field(default=None, description="Optional target agent identifier")
@@ -98,6 +102,7 @@ def _get_provider(
     max_tokens: int | None = None,
     system_instruction: str | None = None,
     enable_reasoning: bool = False,
+    reasoning_effort: Literal["low", "medium", "high"] = "low",
 ) -> ModelProvider:
     """Factory helper to instantiate a concrete ModelProvider instance via ProviderAdapterRegistry.
 
@@ -110,6 +115,7 @@ def _get_provider(
         max_tokens (int | None): Max token generation limit.
         system_instruction (str | None): Optional system prompt text.
         enable_reasoning (bool): Whether to request native reasoning/thinking tokens.
+        reasoning_effort (Literal["low", "medium", "high"]): Reasoning depth level.
 
     Returns:
         ModelProvider: Instantiated model provider.
@@ -120,6 +126,7 @@ def _get_provider(
         temperature=temperature,
         max_tokens=max_tokens,
         enable_reasoning=enable_reasoning,
+        reasoning_effort=reasoning_effort,
         system_prompt=system_instruction,
         base_url=base_url,
         api_key=api_key,
@@ -348,6 +355,13 @@ async def generate_chat(
         if request.enable_reasoning is not None
         else (target_agent.enable_reasoning if target_agent else False)
     )
+    raw_effort = request.reasoning_effort or (
+        target_agent.reasoning_effort if target_agent else "low"
+    )
+    resolved_reasoning_effort = cast(
+        Literal["low", "medium", "high"],
+        raw_effort if raw_effort in ("low", "medium", "high") else "low",
+    )
     provider = _get_provider(
         request.provider_name,
         request.model_name,
@@ -357,6 +371,7 @@ async def generate_chat(
         max_tokens=request.max_tokens,
         system_instruction=resolved_system_prompt,
         enable_reasoning=resolved_enable_reasoning,
+        reasoning_effort=resolved_reasoning_effort,
     )
     full_messages, target_session_id = _prepare_messages_context(
         request.messages, request.session_id, db
@@ -447,6 +462,13 @@ async def stream_chat(
         if request.enable_reasoning is not None
         else (target_agent.enable_reasoning if target_agent else False)
     )
+    raw_effort = request.reasoning_effort or (
+        target_agent.reasoning_effort if target_agent else "low"
+    )
+    resolved_reasoning_effort = cast(
+        Literal["low", "medium", "high"],
+        raw_effort if raw_effort in ("low", "medium", "high") else "low",
+    )
     provider = _get_provider(
         request.provider_name,
         request.model_name,
@@ -456,6 +478,7 @@ async def stream_chat(
         max_tokens=request.max_tokens,
         system_instruction=resolved_system_prompt,
         enable_reasoning=resolved_enable_reasoning,
+        reasoning_effort=resolved_reasoning_effort,
     )
     full_messages, target_session_id = _prepare_messages_context(
         request.messages, request.session_id, db

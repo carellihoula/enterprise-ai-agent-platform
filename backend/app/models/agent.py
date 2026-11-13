@@ -37,6 +37,10 @@ class ModelSpec(BaseModel):
         default=False,
         description="Whether to request native reasoning/thinking tokens from the provider",
     )
+    reasoning_effort: Literal["low", "medium", "high"] = Field(
+        default="low",
+        description="Default reasoning depth when native reasoning is enabled",
+    )
     base_url: str | None = Field(
         default=None, max_length=255, description="Custom base URL endpoint for provider"
     )

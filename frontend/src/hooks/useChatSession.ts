@@ -183,6 +183,7 @@ export function useChatSession({
       temperature: modelConfig.temperature,
       maxTokens: modelConfig.maxTokens,
       enableReasoning: modelConfig.enableReasoning,
+      reasoningEffort: modelConfig.reasoningEffort,
       systemInstruction: modelConfig.systemPrompt,
       apiKey,
       baseUrl,

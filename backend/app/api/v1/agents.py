@@ -4,7 +4,7 @@ This module provides FastAPI routes for creating, listing, retrieving, updating,
 Enterprise AI Agents, serving as the central registry for autonomous agents, knowledge bases, and tools.
 """
 
-from typing import Annotated
+from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -42,6 +42,12 @@ def _to_response(agent: Agent) -> AgentResponse:
         temperature=agent.temperature,
         max_tokens=agent.max_tokens,
         enable_reasoning=agent.enable_reasoning,
+        reasoning_effort=cast(
+            Literal["low", "medium", "high"],
+            agent.reasoning_effort
+            if agent.reasoning_effort in ("low", "medium", "high")
+            else "low",
+        ),
         base_url=agent.base_url,
         api_key=masked_key,
     )
@@ -122,6 +128,7 @@ def create_agent(
         temperature=payload.model.temperature,
         max_tokens=payload.model.max_tokens,
         enable_reasoning=payload.model.enable_reasoning,
+        reasoning_effort=payload.model.reasoning_effort,
         api_key_encrypted=encrypted_key,
         base_url=payload.model.base_url.strip() if payload.model.base_url else None,
         is_default=payload.is_default,
@@ -212,6 +219,7 @@ def update_agent(
         record.temperature = payload.model.temperature
         record.max_tokens = payload.model.max_tokens
         record.enable_reasoning = payload.model.enable_reasoning
+        record.reasoning_effort = payload.model.reasoning_effort
         if payload.model.base_url is not None:
             record.base_url = payload.model.base_url.strip() or None
         if payload.model.api_key is not None:

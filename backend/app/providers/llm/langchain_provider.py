@@ -110,6 +110,17 @@ class LangChainModelProvider(ModelProvider):
 
             # [Explicit Reasoning Flag] Only request parsed reasoning when explicitly enabled on the model config
             if config.enable_reasoning and "reasoning_format" not in groq_kwargs:
+                if "reasoning_effort" not in groq_kwargs:
+                    try:
+                        return ChatGroq(
+                            **{
+                                **groq_kwargs,
+                                "reasoning_format": "parsed",
+                                "reasoning_effort": config.reasoning_effort,
+                            }
+                        )
+                    except Exception:
+                        pass
                 try:
                     return ChatGroq(**{**groq_kwargs, "reasoning_format": "parsed"})
                 except Exception:
@@ -166,6 +177,10 @@ class LangChainModelProvider(ModelProvider):
             if config.base_url:
                 kwargs["base_url"] = config.base_url
 
+            # [Reasoning Effort Mapping] Translate low/medium/high into provider token budgets
+            effort_budgets = {"low": 1024, "medium": 4096, "high": 16384}
+            budget_tokens = effort_budgets.get(config.reasoning_effort, 1024)
+
             # [Explicit Reasoning Flag] Enable native provider reasoning only when configured on the assistant/model
             if (
                 config.enable_reasoning
@@ -177,8 +192,7 @@ class LangChainModelProvider(ModelProvider):
                     k in config.provider_params
                     for k in ("thinking_budget", "thinking_level", "thinking_config")
                 ):
-                    # [Gemini Thinking] Use dynamic budget (-1) so models with default 0 think without truncating
-                    gemini_thinking_kwargs["thinking_budget"] = -1
+                    gemini_thinking_kwargs["thinking_budget"] = budget_tokens
                 try:
                     return cast(
                         BaseChatModel,
@@ -210,7 +224,7 @@ class LangChainModelProvider(ModelProvider):
                     anthropic_kwargs = {
                         **kwargs,
                         "temperature": 1.0,
-                        "thinking": {"type": "enabled", "budget_tokens": 2048},
+                        "thinking": {"type": "enabled", "budget_tokens": budget_tokens},
                         **config.provider_params,
                     }
                     return cast(BaseChatModel, init_chat_model(**anthropic_kwargs))
@@ -226,7 +240,7 @@ class LangChainModelProvider(ModelProvider):
                     openai_reasoning_kwargs = {
                         **kwargs,
                         "use_responses_api": True,
-                        "reasoning": {"summary": "auto"},
+                        "reasoning": {"effort": config.reasoning_effort, "summary": "auto"},
                         **config.provider_params,
                     }
                     openai_reasoning_kwargs.pop("temperature", None)

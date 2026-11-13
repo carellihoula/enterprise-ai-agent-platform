@@ -9,12 +9,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { ReasoningEffort } from '@/types/agent';
+import {
   ArrowUp,
   Square,
   Paperclip,
   Globe,
-  Sparkles,
-  SlidersHorizontal,
+  Brain,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +33,9 @@ interface ChatInputProps {
   placeholder?: string;
   onOpenAssistantPicker?: () => void;
   activeAssistantName?: string;
+  enableReasoning?: boolean;
+  reasoningEffort?: ReasoningEffort;
+  onReasoningEffortChange?: (effort: ReasoningEffort) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -36,6 +46,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   placeholder = 'Ask a question, analyze data, or instruct an agent...',
   onOpenAssistantPicker,
   activeAssistantName,
+  enableReasoning = false,
+  reasoningEffort = 'low',
+  onReasoningEffortChange,
 }) => {
   const [prompt, setPrompt] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -109,6 +122,28 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 {activeAssistantName ? `Agent: ${activeAssistantName}` : "Select Agent"}
               </span>
             </button>
+
+            {enableReasoning && onReasoningEffortChange && (
+              <Select
+                value={reasoningEffort}
+                onValueChange={(val) => onReasoningEffortChange(val as ReasoningEffort)}
+                disabled={isLoading || disabled}
+              >
+                <SelectTrigger
+                  aria-label="Reasoning effort"
+                  title="Reasoning effort"
+                  className="h-7 w-auto min-w-[96px] gap-1.5 px-2 py-0.5 text-xs font-medium text-zinc-700 border-zinc-200 bg-white hover:bg-zinc-100 shadow-none"
+                >
+                  <Brain className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Right Action: Send or Stop */}
