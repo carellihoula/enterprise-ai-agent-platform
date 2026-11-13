@@ -172,17 +172,34 @@ class LangChainModelProvider(ModelProvider):
                 and lc_provider == "google_genai"
                 and "include_thoughts" not in config.provider_params
             ):
+                gemini_thinking_kwargs: dict[str, Any] = {"include_thoughts": True}
+                if not any(
+                    k in config.provider_params
+                    for k in ("thinking_budget", "thinking_level", "thinking_config")
+                ):
+                    # [Gemini Thinking] Use dynamic budget (-1) so models with default 0 think without truncating
+                    gemini_thinking_kwargs["thinking_budget"] = -1
                 try:
                     return cast(
                         BaseChatModel,
                         init_chat_model(
                             **kwargs,
-                            include_thoughts=True,
+                            **gemini_thinking_kwargs,
                             **config.provider_params,
                         ),
                     )
                 except Exception:
-                    pass
+                    try:
+                        return cast(
+                            BaseChatModel,
+                            init_chat_model(
+                                **kwargs,
+                                include_thoughts=True,
+                                **config.provider_params,
+                            ),
+                        )
+                    except Exception:
+                        pass
 
             if (
                 config.enable_reasoning

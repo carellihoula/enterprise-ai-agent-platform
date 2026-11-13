@@ -75,6 +75,7 @@ export interface StreamChatParams {
   modelName: string;
   temperature?: number;
   maxTokens?: number;
+  enableReasoning?: boolean;
   systemInstruction?: string;
   apiKey?: string;
   baseUrl?: string;
@@ -93,6 +94,7 @@ export async function streamChatCompletion({
   modelName,
   temperature = 0.7,
   maxTokens,
+  enableReasoning,
   systemInstruction,
   apiKey,
   baseUrl,
@@ -115,6 +117,7 @@ export async function streamChatCompletion({
         model_name: modelName,
         temperature,
         max_tokens: maxTokens || undefined,
+        enable_reasoning: enableReasoning,
         system_instruction: systemInstruction || undefined,
         api_key: apiKey || undefined,
         base_url: baseUrl || undefined,

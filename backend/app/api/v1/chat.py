@@ -368,8 +368,12 @@ async def generate_chat(
         collected_parts: list[str] = []
         recorded_steps: list[dict[str, Any]] = []
         async for evt in run_agent_tool_loop(provider.chat_model, lc_messages, agent_tools):
-            if evt.get("type") == "token":
+            evt_type = evt.get("type")
+            if evt_type == "token":
                 collected_parts.append(str(evt.get("delta_content", "")))
+            elif evt_type in ("think", "think_delta"):
+                if resolved_enable_reasoning:
+                    _record_trace_event(recorded_steps, evt)
             else:
                 _record_trace_event(recorded_steps, evt)
         final_text = "".join(collected_parts)
@@ -470,9 +474,14 @@ async def stream_chat(
                 lc_messages = provider._format_messages(full_messages, resolved_system_prompt)
                 async for evt in run_agent_tool_loop(provider.chat_model, lc_messages, agent_tools):
                     evt_type = evt.get("type")
-                    if evt_type in ("tool_start", "tool_end", "think", "think_delta"):
+                    if evt_type in ("tool_start", "tool_end"):
                         _record_trace_event(recorded_steps, evt)
                         yield f"data: {json.dumps({'tool_event': evt})}\n\n"
+                    elif evt_type in ("think", "think_delta"):
+                        # [Config Gate] Only capture and stream reasoning when enabled in assistant config
+                        if resolved_enable_reasoning:
+                            _record_trace_event(recorded_steps, evt)
+                            yield f"data: {json.dumps({'tool_event': evt})}\n\n"
                     elif evt_type == "token":
                         delta = str(evt.get("delta_content", ""))
                         accumulated_content += delta
@@ -488,7 +497,7 @@ async def stream_chat(
                     max_tokens=request.max_tokens,
                     system_instruction=resolved_system_prompt,
                 ):
-                    if chunk.delta_reasoning:
+                    if chunk.delta_reasoning and resolved_enable_reasoning:
                         think_evt: dict[str, Any] = {
                             "type": "think_delta",
                             "delta": chunk.delta_reasoning,

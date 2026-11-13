@@ -182,6 +182,7 @@ export function useChatSession({
       modelName: modelConfig.modelName,
       temperature: modelConfig.temperature,
       maxTokens: modelConfig.maxTokens,
+      enableReasoning: modelConfig.enableReasoning,
       systemInstruction: modelConfig.systemPrompt,
       apiKey,
       baseUrl,
@@ -191,9 +192,20 @@ export function useChatSession({
           const updated = [...prev];
           const lastIndex = updated.length - 1;
           if (lastIndex >= 0 && updated[lastIndex].role === "assistant") {
+            const prevCalls = updated[lastIndex].toolCalls;
+            const finalizedCalls = prevCalls?.some(
+              (c) => c.type === "think" && c.status === "running",
+            )
+              ? prevCalls.map((c) =>
+                  c.type === "think" && c.status === "running"
+                    ? { ...c, status: "done" as const }
+                    : c,
+                )
+              : prevCalls;
             updated[lastIndex] = {
               ...updated[lastIndex],
               content: updated[lastIndex].content + delta,
+              toolCalls: finalizedCalls,
             };
           }
           return updated;
@@ -210,7 +222,7 @@ export function useChatSession({
           let nextCalls = [...existing];
           if (evt.type === "think_delta" && evt.delta) {
             const lastStep = nextCalls[nextCalls.length - 1];
-            if (lastStep && lastStep.type === "think" && lastStep.status === "running") {
+            if (lastStep && lastStep.type === "think") {
               nextCalls[nextCalls.length - 1] = {
                 ...lastStep,
                 text: (lastStep.text ?? "") + evt.delta,
