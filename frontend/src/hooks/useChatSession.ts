@@ -35,9 +35,14 @@ export function useChatSession({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
+    isMountedRef.current = true;
     loadSessions();
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   const loadSessions = async () => {
@@ -45,39 +50,48 @@ export function useChatSession({
     setErrorMessage(null);
     try {
       const data = await fetchSessions();
+      if (!isMountedRef.current) return;
       setSessions(data);
       if (data.length > 0 && !currentSessionId) {
         handleSelectSession(data[0].id);
       }
     } catch (err: any) {
+      if (!isMountedRef.current) return;
       toast.error(
         "Could not connect to the backend server. Please verify the service is running.",
         "Connection Error",
       );
     } finally {
-      setIsLoadingSessions(false);
+      if (isMountedRef.current) {
+        setIsLoadingSessions(false);
+      }
     }
   };
 
   const handleSelectSession = async (sessionId: string) => {
+    if (!isMountedRef.current) return;
     setCurrentSessionId(sessionId);
     onSessionSelected?.();
     setIsLoadingMessages(true);
     setErrorMessage(null);
     try {
       const detail = await fetchSessionDetails(sessionId);
+      if (!isMountedRef.current) return;
       setMessages(detail.messages || []);
       // [Sync] Update selected assistant if session was bound to an assistant
       if (detail.assistant_id && onAssistantMatched) {
         onAssistantMatched(detail.assistant_id);
       }
     } catch (err: any) {
+      if (!isMountedRef.current) return;
       toast.error(
         "Failed to load conversation messages.",
         "Session Error",
       );
     } finally {
-      setIsLoadingMessages(false);
+      if (isMountedRef.current) {
+        setIsLoadingMessages(false);
+      }
     }
   };
 

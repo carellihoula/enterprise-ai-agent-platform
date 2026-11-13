@@ -149,3 +149,60 @@ class SessionMessage(Base):
     session: Mapped["ConversationSession"] = relationship(
         "ConversationSession", back_populates="messages"
     )
+
+
+class McpServer(Base):
+    """SQLAlchemy ORM model representing a Model Context Protocol (MCP) server configuration.
+
+    Attributes:
+        id (str): Primary key UUID string identifier.
+        agent_id (str | None): Optional foreign key referencing a specific Agent, or None for workspace-level.
+        name (str): Unique server key identifier within mcpServers (e.g., 'github', 'postgres').
+        transport (str): Transport protocol ('stdio', 'http', or 'sse').
+        command (str): Executable command for stdio transport (e.g., 'npx', 'uvx').
+        args (list[str]): Command-line arguments array for stdio transport.
+        env (dict[str, str]): Environment variables dictionary for stdio transport.
+        url (str): Remote endpoint URL for http or sse transport.
+        headers (dict[str, str]): HTTP headers dictionary for http or sse transport.
+        disabled (bool): Whether the MCP server is currently disabled.
+        extra (dict[str, Any]): Additional custom properties preserved from raw mcp.json.
+        sort_order (int): Display ordering index.
+        created_at (datetime): Creation timestamp with timezone.
+        updated_at (datetime): Last modification timestamp with timezone.
+    """
+
+    __tablename__ = "mcp_servers"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    transport: Mapped[str] = mapped_column(String(20), nullable=False, default="stdio")
+    command: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    args: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    env: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
+    url: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    headers: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
+    disabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    extra: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    connection_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="idle", server_default="idle"
+    )
+    connection_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tools_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    discovered_tools: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=current_utc_time)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=current_utc_time, onupdate=current_utc_time
+    )
+
+    # [Relationship] Optional parent Agent association
+    agent: Mapped[Agent | None] = relationship("Agent")

@@ -33,8 +33,10 @@ let memoryToasts: ToastItem[] = [];
  * Dispatches an updated toast list to all active subscriber components.
  */
 function notifyListeners(): void {
-  // [Architecture] Broadcast snapshot copy to protect subscriber immutability
-  listeners.forEach((listener) => listener([...memoryToasts]));
+  // [Architecture] Defer broadcast via microtask to prevent state updates during active render phases
+  queueMicrotask(() => {
+    listeners.forEach((listener) => listener([...memoryToasts]));
+  });
 }
 
 /**

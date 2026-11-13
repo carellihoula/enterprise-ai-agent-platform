@@ -14,6 +14,7 @@ import {
   AssistantCreatePayload,
   AssistantUpdatePayload,
 } from '@/types/agent';
+import { McpConfigResponseDto, McpServerDto, McpTestResponseDto } from '@/types/mcp';
 import { cleanSerializedContentBlocks } from '@/lib/utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
@@ -225,3 +226,70 @@ export const fetchAssistant = fetchAgent;
 export const createAssistantApi = createAgentApi;
 export const updateAssistantApi = updateAgentApi;
 export const deleteAssistantApi = deleteAgentApi;
+
+/**
+ * Fetches the persisted MCP servers configuration from the backend.
+ *
+ * Args:
+ *   agentId (string | undefined): Optional agent ID scope.
+ *
+ * Returns:
+ *   Promise<McpConfigResponseDto>: Synchronized structured servers and mcpServers JSON map.
+ */
+export async function fetchMcpConfig(agentId?: string): Promise<McpConfigResponseDto> {
+  const query = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : '';
+  const res = await fetch(`${API_BASE_URL}/mcp${query}`, { cache: 'no-store' });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch MCP configuration (${res.status})`);
+  }
+  return res.json();
+}
+
+/**
+ * Synchronizes the full MCP servers configuration with the backend database.
+ *
+ * Args:
+ *   servers (McpServerDto[]): Ordered list of MCP server payloads to persist.
+ *   agentId (string | undefined): Optional agent ID scope.
+ *
+ * Returns:
+ *   Promise<McpConfigResponseDto>: Persisted MCP configuration response.
+ */
+export async function syncMcpConfig(
+  servers: McpServerDto[],
+  agentId?: string
+): Promise<McpConfigResponseDto> {
+  const query = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : '';
+  const res = await fetch(`${API_BASE_URL}/mcp${query}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ servers }),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Failed to save MCP configuration (${res.status}): ${errText}`);
+  }
+  return res.json();
+}
+
+/**
+ * Probes a single MCP server configuration in an isolated disposable sandbox or remote check.
+ *
+ * Args:
+ *   server (McpServerDto): MCP server configuration payload to test.
+ *
+ * Returns:
+ *   Promise<McpTestResponseDto>: Live handshake status, discovered tools count, and diagnostics.
+ */
+export async function testMcpServer(server: McpServerDto): Promise<McpTestResponseDto> {
+  const res = await fetch(`${API_BASE_URL}/mcp/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(server),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Connection test failed (${res.status}): ${errText}`);
+  }
+  return res.json();
+}

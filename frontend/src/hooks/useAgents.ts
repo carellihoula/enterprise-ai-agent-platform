@@ -33,7 +33,17 @@ export function useAgents({ onSyncModelConfig }: UseAgentsProps = {}) {
 
   // [Stability] Keep stable ref to onSyncModelConfig to prevent infinite render loops
   const onSyncModelConfigRef = useRef(onSyncModelConfig);
-  onSyncModelConfigRef.current = onSyncModelConfig;
+  useEffect(() => {
+    onSyncModelConfigRef.current = onSyncModelConfig;
+  }, [onSyncModelConfig]);
+
+  const isMountedRef = useRef(false);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // [Data] Load available models per provider from SUPPORTED_PROVIDERS
   useEffect(() => {
@@ -82,6 +92,7 @@ export function useAgents({ onSyncModelConfig }: UseAgentsProps = {}) {
     setIsLoading(true);
     try {
       const data = await fetchAgents();
+      if (!isMountedRef.current) return;
       setAgents(data);
       if (data.length > 0) {
         const savedId =
@@ -98,13 +109,16 @@ export function useAgents({ onSyncModelConfig }: UseAgentsProps = {}) {
         setActiveAgent(null);
       }
     } catch (err) {
+      if (!isMountedRef.current) return;
       console.error("Failed to load agents catalog", err);
       toast.error(
         "Could not load agents catalog. Please check your connection.",
         "Catalog Error"
       );
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [syncAgentToModelConfig]);
 

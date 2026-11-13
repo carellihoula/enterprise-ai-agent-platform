@@ -18,6 +18,7 @@ import { Agent } from "@/types/agent";
 import { useChatSession } from "@/hooks/useChatSession";
 import { useAgents } from "@/hooks/useAgents";
 import { AssistantsListView as AgentsListView, AssistantPickerModal as AgentPickerModal } from "@/components/assistants";
+import { McpConfigView } from "@/components/mcp";
 import {
   EngineSubBar,
   ChatPlaygroundView,
@@ -216,8 +217,15 @@ export default function EnterpriseAppPage() {
           />
         </div>
 
-        {/* 4. Placeholder Views for Other Modules */}
-        {activeTab !== "home" && activeTab !== "chat" && activeTab !== "agents" && (
+        {/* 4. MCP Servers Configuration View */}
+        {activeTab === "mcp" && (
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
+            <McpConfigView activeAgent={activeAgent} />
+          </div>
+        )}
+
+        {/* 5. Placeholder Views for Other Modules */}
+        {activeTab !== "home" && activeTab !== "chat" && activeTab !== "agents" && activeTab !== "mcp" && (
           <ModulePlaceholderView
             activeTab={activeTab}
             onNavigateHome={() => setActiveTab("home")}
