@@ -5,8 +5,9 @@ and session generator for managing persistent platform data (e.g. conversation s
 """
 
 from collections.abc import Generator
+from typing import Any
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import get_settings
@@ -22,6 +23,22 @@ engine = create_engine(
     else {},
     echo=settings.debug,
 )
+
+
+@event.listens_for(engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection: Any, _connection_record: Any) -> None:
+    """Enforces FOREIGN KEY constraints (`ON DELETE SET NULL`/`CASCADE`) on SQLite connections.
+
+    Args:
+        dbapi_connection (Any): Raw DBAPI connection object.
+        _connection_record (Any): SQLAlchemy connection pool record (unused).
+    """
+    if "sqlite" in settings.database_url.get_secret_value():
+        # [SQLite Parity] Enable foreign key cascades/nullification disabled by default in SQLite
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 
 # [Session Factory] Create thread-local session factory for database operations
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
