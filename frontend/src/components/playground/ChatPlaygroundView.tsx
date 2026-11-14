@@ -1,15 +1,19 @@
 import React, { useRef, useEffect } from "react";
-import { Message } from "@/types/chat";
+import { Message, PendingApproval } from "@/types/chat";
 import { ReasoningEffort } from "@/types/agent";
 import { ChatMessageItem } from "@/components/ChatMessageItem";
 import { ChatInput } from "@/components/ChatInput";
 import { Sparkles } from "lucide-react";
 import { PromptSuggestionsGrid } from "./PromptSuggestionsGrid";
+import { ApprovalPromptCard } from "./ApprovalPromptCard";
 
 interface ChatPlaygroundViewProps {
   messages: Message[];
   isLoadingMessages: boolean;
   isStreaming: boolean;
+  pendingApproval?: PendingApproval | null;
+  isResolvingApproval?: boolean;
+  onApprovalDecision?: (decision: "approve" | "reject") => void;
   onSendMessage: (content: string) => void;
   onStopStreaming: () => void;
   onRetryLastMessage: () => void;
@@ -27,6 +31,9 @@ export const ChatPlaygroundView: React.FC<ChatPlaygroundViewProps> = ({
   messages,
   isLoadingMessages,
   isStreaming,
+  pendingApproval,
+  isResolvingApproval = false,
+  onApprovalDecision,
   onSendMessage,
   onStopStreaming,
   onRetryLastMessage,
@@ -90,6 +97,14 @@ export const ChatPlaygroundView: React.FC<ChatPlaygroundViewProps> = ({
           </div>
         )}
       </div>
+
+      {pendingApproval && onApprovalDecision && (
+        <ApprovalPromptCard
+          approval={pendingApproval}
+          isSubmitting={isResolvingApproval}
+          onDecision={onApprovalDecision}
+        />
+      )}
 
       <ChatInput
         onSendMessage={onSendMessage}

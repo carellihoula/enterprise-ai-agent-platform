@@ -95,12 +95,15 @@ export default function EnterpriseAppPage() {
     isLoadingSessions,
     isLoadingMessages,
     isStreaming,
+    pendingApproval,
+    isResolvingApproval,
     handleSelectSession,
     handleNewSession,
     handleDeleteSession,
     handleSendMessage,
     handleStopStreaming,
     handleRetryLastMessage,
+    handleApprovalDecision,
   } = useChatSession({
     modelConfig,
     activeAssistantId: activeAgent?.id,
@@ -195,6 +198,9 @@ export default function EnterpriseAppPage() {
                 messages={messages}
                 isLoadingMessages={isLoadingMessages}
                 isStreaming={isStreaming}
+                pendingApproval={pendingApproval}
+                isResolvingApproval={isResolvingApproval}
+                onApprovalDecision={handleApprovalDecision}
                 onSendMessage={handleSendMessage}
                 onStopStreaming={handleStopStreaming}
                 onRetryLastMessage={handleRetryLastMessage}

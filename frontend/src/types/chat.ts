@@ -13,6 +13,13 @@ export interface ToolExecutionBadge {
   text?: string;
 }
 
+export interface PendingApproval {
+  approvalId: string;
+  toolName: string;
+  arguments?: Record<string, unknown>;
+  reason?: string;
+}
+
 export interface Message {
   id?: string;
   role: "user" | "assistant" | "system";

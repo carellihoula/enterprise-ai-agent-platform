@@ -17,9 +17,16 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal, get_db
+from app.core.errors import DomainError
 from app.core.security import decrypt_api_key
 from app.engine.langchain_tools import build_langchain_tools_for_agent, run_agent_tool_loop
 from app.engine.long_term_memory import consolidate_turn_memories, format_long_term_memory_block
+from app.engine.policies import (
+    AgentPolicyConfig,
+    approval_manager,
+    parse_agent_policies,
+    redact_sensitive_data,
+)
 from app.engine.short_term_memory import (
     build_short_term_context,
     extract_working_state_updates,
@@ -330,6 +337,7 @@ async def _persist_chat_turn(
     trace_steps: list[dict[str, Any]] | None = None,
     history_budget: int | None = None,
     agent_id: str | None = None,
+    policy: AgentPolicyConfig | None = None,
 ) -> None:
     """Persists messages & working state synchronously, then schedules memory maintenance.
 
@@ -342,15 +350,31 @@ async def _persist_chat_turn(
         trace_steps (list[dict[str, Any]] | None, optional): Recorded reasoning/tool steps.
         history_budget (int | None, optional): Sentinel-computed history token budget.
         agent_id (str | None, optional): Active Agent UUID scoping long-term memories.
+        policy (AgentPolicyConfig | None, optional): Active governance & DLP policy config.
     """
+    dlp_active = bool(policy and policy.dlp_filter_active)
+    clean_assistant = redact_sensitive_data(assistant_content) if dlp_active else assistant_content
+    clean_steps = trace_steps
+    if dlp_active and trace_steps:
+        clean_steps = [
+            {
+                **step,
+                "output": redact_sensitive_data(str(step["output"]))
+                if step.get("output") is not None
+                else None,
+            }
+            for step in trace_steps
+        ]
+
     service = SessionService(db)
     for msg in request_messages:
-        service.add_message(session_id, msg.role, msg.content)
+        clean_content = redact_sensitive_data(msg.content) if dlp_active else msg.content
+        service.add_message(session_id, msg.role, clean_content)
     service.add_message(
         session_id,
         "assistant",
-        assistant_content,
-        trace_steps=trace_steps,
+        clean_assistant,
+        trace_steps=clean_steps,
     )
     session = service.get_session(session_id)
     message_count = len(session.messages)
@@ -516,6 +540,39 @@ def _record_trace_event(recorded_steps: list[dict[str, Any]], evt: dict[str, Any
         )
 
 
+class ApprovalDecisionRequest(BaseModel):
+    """Operator decision payload for resolving a paused Human-in-the-Loop tool call."""
+
+    decision: Literal["approve", "reject"]
+
+
+@router.post("/approvals/{approval_id}", status_code=status.HTTP_200_OK)
+async def resolve_tool_approval(
+    approval_id: str,
+    payload: ApprovalDecisionRequest,
+) -> dict[str, str]:
+    """Resolves a pending Human-in-the-Loop tool approval request.
+
+    Args:
+        approval_id (str): Unique approval identifier emitted via SSE `approval_required`.
+        payload (ApprovalDecisionRequest): Operator decision (`approve` or `reject`).
+
+    Returns:
+        dict[str, str]: Confirmation dictionary with resolved `approval_id` and `decision`.
+
+    Raises:
+        DomainError: If the approval request does not exist or has already expired.
+    """
+    resolved = approval_manager.resolve(approval_id, payload.decision)
+    if not resolved:
+        raise DomainError(
+            message=f"Approval request '{approval_id}' not found or already expired.",
+            error_code="APPROVAL_NOT_FOUND",
+            status_code=404,
+        )
+    return {"approval_id": approval_id, "decision": payload.decision}
+
+
 @router.post("", response_model=ChatResponse, status_code=status.HTTP_200_OK)
 async def generate_chat(
     request: ChatRequest,
@@ -561,6 +618,7 @@ async def generate_chat(
         enable_reasoning=resolved_enable_reasoning,
         reasoning_effort=resolved_reasoning_effort,
     )
+    agent_policy = parse_agent_policies(target_agent.policies if target_agent else None)
     agent_tools = await build_langchain_tools_for_agent(target_agent, db)
     full_messages, target_session_id, history_budget = _prepare_messages_context(
         request.messages,
@@ -577,7 +635,13 @@ async def generate_chat(
         lc_messages = provider._format_messages(full_messages, resolved_system_prompt)
         collected_parts: list[str] = []
         recorded_steps: list[dict[str, Any]] = []
-        async for evt in run_agent_tool_loop(provider.chat_model, lc_messages, agent_tools):
+        async for evt in run_agent_tool_loop(
+            provider.chat_model,
+            lc_messages,
+            agent_tools,
+            policy=agent_policy,
+            allow_hitl=False,
+        ):
             evt_type = evt.get("type")
             if evt_type == "token":
                 collected_parts.append(str(evt.get("delta_content", "")))
@@ -597,6 +661,7 @@ async def generate_chat(
                 trace_steps=recorded_steps or None,
                 history_budget=history_budget,
                 agent_id=target_agent.id if target_agent else None,
+                policy=agent_policy,
             )
         return ChatResponse(
             content=final_text,
@@ -624,6 +689,7 @@ async def generate_chat(
             provider=provider,
             history_budget=history_budget,
             agent_id=target_agent.id if target_agent else None,
+            policy=agent_policy,
         )
 
     return ChatResponse(
@@ -681,6 +747,7 @@ async def stream_chat(
         enable_reasoning=resolved_enable_reasoning,
         reasoning_effort=resolved_reasoning_effort,
     )
+    agent_policy = parse_agent_policies(target_agent.policies if target_agent else None)
     agent_tools = await build_langchain_tools_for_agent(target_agent, db)
     full_messages, target_session_id, history_budget = _prepare_messages_context(
         request.messages,
@@ -703,10 +770,17 @@ async def stream_chat(
         try:
             if agent_tools and isinstance(provider, LangChainModelProvider):
                 lc_messages = provider._format_messages(full_messages, resolved_system_prompt)
-                async for evt in run_agent_tool_loop(provider.chat_model, lc_messages, agent_tools):
+                async for evt in run_agent_tool_loop(
+                    provider.chat_model,
+                    lc_messages,
+                    agent_tools,
+                    policy=agent_policy,
+                    allow_hitl=True,
+                ):
                     evt_type = evt.get("type")
-                    if evt_type in ("tool_start", "tool_end"):
-                        _record_trace_event(recorded_steps, evt)
+                    if evt_type in ("tool_start", "tool_end", "approval_required"):
+                        if evt_type in ("tool_start", "tool_end"):
+                            _record_trace_event(recorded_steps, evt)
                         yield f"data: {json.dumps({'tool_event': evt})}\n\n"
                     elif evt_type in ("think", "think_delta"):
                         # [Config Gate] Only capture and stream reasoning when enabled in assistant config
@@ -758,6 +832,7 @@ async def stream_chat(
                         trace_steps=recorded_steps or None,
                         history_budget=history_budget,
                         agent_id=target_agent.id if target_agent else None,
+                        policy=agent_policy,
                     )
                     logger.info(f"[Stream] Saved messages to session_id='{target_session_id}'")
                 finally:

@@ -57,7 +57,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
 }
 
 export interface ChatToolEvent {
-  type: 'tool_start' | 'tool_end' | 'think' | 'think_delta';
+  type: 'tool_start' | 'tool_end' | 'think' | 'think_delta' | 'approval_required';
   tool_name?: string;
   ok?: boolean;
   latency_ms?: number;
@@ -65,6 +65,8 @@ export interface ChatToolEvent {
   output?: string;
   text?: string;
   delta?: string;
+  approval_id?: string;
+  reason?: string;
 }
 
 export interface StreamChatParams {
@@ -354,6 +356,22 @@ export async function testBuiltinTool(
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(`Built-in tool execution failed (${res.status}): ${errText}`);
+  }
+  return res.json();
+}
+
+export async function resolveToolApproval(
+  approvalId: string,
+  decision: 'approve' | 'reject',
+): Promise<{ approval_id: string; decision: 'approve' | 'reject' }> {
+  const res = await fetch(`${API_BASE_URL}/chat/approvals/${approvalId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision }),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Failed to resolve tool approval (${res.status}): ${errText}`);
   }
   return res.json();
 }

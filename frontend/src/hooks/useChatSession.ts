@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { Message, Session, ModelConfigState } from "@/types/chat";
+import { Message, Session, ModelConfigState, PendingApproval } from "@/types/chat";
 import {
   fetchSessions,
   createSession,
   fetchSessionDetails,
   deleteSession,
   streamChatCompletion,
+  resolveToolApproval,
 } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 
@@ -32,6 +33,8 @@ export function useChatSession({
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
+  const [isResolvingApproval, setIsResolvingApproval] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -213,6 +216,18 @@ export function useChatSession({
         });
       },
       onToolEvent: (evt) => {
+        if (evt.type === "approval_required" && evt.approval_id && evt.tool_name) {
+          setPendingApproval({
+            approvalId: evt.approval_id,
+            toolName: evt.tool_name,
+            arguments: evt.arguments,
+            reason: evt.reason,
+          });
+          return;
+        }
+        if (evt.type === "tool_end") {
+          setPendingApproval(null);
+        }
         setMessages((prev) => {
           const updated = [...prev];
           const lastIndex = updated.length - 1;
@@ -298,10 +313,12 @@ export function useChatSession({
           }
           return updated;
         });
+        setPendingApproval(null);
         setIsStreaming(false);
         abortControllerRef.current = null;
       },
       onError: (err) => {
+        setPendingApproval(null);
         setIsStreaming(false);
         abortControllerRef.current = null;
         if (err.name !== "AbortError" && !err.message.includes("aborted")) {
@@ -327,6 +344,23 @@ export function useChatSession({
     }
   };
 
+  const handleApprovalDecision = async (decision: "approve" | "reject") => {
+    if (!pendingApproval || isResolvingApproval) return;
+    setIsResolvingApproval(true);
+    try {
+      await resolveToolApproval(pendingApproval.approvalId, decision);
+      setPendingApproval(null);
+    } catch (err: any) {
+      toast.add({
+        variant: "destructive",
+        title: "Approval Error",
+        description: err?.message || "Failed to submit tool approval decision.",
+      });
+    } finally {
+      setIsResolvingApproval(false);
+    }
+  };
+
   return {
     sessions,
     currentSessionId,
@@ -334,6 +368,8 @@ export function useChatSession({
     isLoadingSessions,
     isLoadingMessages,
     isStreaming,
+    pendingApproval,
+    isResolvingApproval,
     errorMessage,
     setErrorMessage,
     handleSelectSession,
@@ -342,5 +378,6 @@ export function useChatSession({
     handleSendMessage,
     handleStopStreaming,
     handleRetryLastMessage,
+    handleApprovalDecision,
   };
 }
