@@ -57,7 +57,7 @@ class ModelConfig(BaseModel):
         description="Whether to request native reasoning/thinking tokens from the provider",
     )
     reasoning_effort: Literal["low", "medium", "high"] = Field(
-        default="low",
+        default="medium",
         description="Reasoning depth level (low, medium, high) when reasoning is enabled",
     )
     system_prompt: str | None = Field(default=None, description="System prompt instructions")

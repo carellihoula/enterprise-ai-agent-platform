@@ -46,7 +46,7 @@ def _to_response(agent: Agent) -> AgentResponse:
             Literal["low", "medium", "high"],
             agent.reasoning_effort
             if agent.reasoning_effort in ("low", "medium", "high")
-            else "low",
+            else "medium",
         ),
         base_url=agent.base_url,
         api_key=masked_key,

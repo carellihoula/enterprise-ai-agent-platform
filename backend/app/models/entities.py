@@ -70,7 +70,7 @@ class Agent(Base):
         Boolean, default=False, nullable=False, server_default=false()
     )
     reasoning_effort: Mapped[str] = mapped_column(
-        String(16), default="low", nullable=False, server_default="low"
+        String(16), default="medium", nullable=False, server_default="medium"
     )
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -93,6 +93,9 @@ class ConversationSession(Base):
         id (str): Primary key UUID string identifier.
         title (str): Title or summary of the conversation session.
         agent_id (str | None): Optional foreign key referencing the associated Agent.
+        rolling_summary (str | None): Progressive summary of older conversation turns.
+        summary_message_count (int): Number of earliest session messages covered by `rolling_summary`.
+        working_state (dict[str, Any]): Structured session state isolated from narrative summaries.
         created_at (datetime): Timestamp when the session was created.
         updated_at (datetime): Timestamp when the session was last updated.
         messages (list[SessionMessage]): Relationship to associated session messages.
@@ -108,6 +111,13 @@ class ConversationSession(Base):
         ForeignKey("agents.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+    rolling_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_message_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    working_state: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=current_utc_time)
     updated_at: Mapped[datetime] = mapped_column(
@@ -208,6 +218,58 @@ class McpServer(Base):
         JSON, nullable=False, default=list, server_default="[]"
     )
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=current_utc_time)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=current_utc_time, onupdate=current_utc_time
+    )
+
+
+class AgentMemory(Base):
+    """SQLAlchemy ORM model representing a persistent long-term memory entry.
+
+    Attributes:
+        id (str): Primary key UUID string identifier.
+        agent_id (str | None): Optional foreign key isolating memory to a specific Agent.
+        source_session_id (str | None): Optional originating ConversationSession UUID.
+        memory_type (str): Category (`semantic`, `episodic`, or `procedural`).
+        content (str): Concise atomic memory fact, preference, or lesson.
+        tags (list[str]): Keywords/tags used for lexical relevance scoring.
+        importance (float): Salience score in `[0.0, 1.0]`.
+        access_count (int): Number of times this memory was injected into prompts.
+        last_accessed_at (datetime | None): Timestamp of the most recent retrieval.
+        created_at (datetime): Creation timestamp with timezone.
+        updated_at (datetime): Last modification timestamp with timezone.
+    """
+
+    __tablename__ = "agent_memories"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    source_session_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("conversation_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    memory_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="semantic", server_default="semantic", index=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
+    importance: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.5, server_default="0.5"
+    )
+    access_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    last_accessed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=current_utc_time)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=current_utc_time, onupdate=current_utc_time

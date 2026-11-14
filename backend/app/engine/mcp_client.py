@@ -86,6 +86,26 @@ def _validate_remote_url_ssrf(url: str) -> None:
             )
 
 
+def _normalize_http_headers(headers: dict[str, str]) -> dict[str, str]:
+    """Normalizes HTTP headers, auto-prefixing bare Authorization tokens with `Bearer `.
+
+    Args:
+        headers (dict[str, str]): Sanitized HTTP headers dictionary.
+
+    Returns:
+        dict[str, str]: Normalized headers ready for outbound HTTP/SSE transport.
+    """
+    normalized: dict[str, str] = {}
+    for key, val in headers.items():
+        trimmed = val.strip()
+        # [UX Tolerance] If user enters a raw token under Authorization without a scheme, prefix Bearer
+        if key.lower() == "authorization" and trimmed and " " not in trimmed:
+            normalized[key] = f"Bearer {trimmed}"
+        else:
+            normalized[key] = val
+    return normalized
+
+
 def _build_sandbox_docker_args(payload: McpServerPayload) -> list[str]:
     """Builds the `docker run` argument list for an ephemeral, isolated stdio MCP sandbox.
 
@@ -287,7 +307,7 @@ async def _probe_transport(
 
     # [SSRF Protection] Verify remote URL before opening outbound connection
     _validate_remote_url_ssrf(payload.url)
-    resolved_headers = _sanitize_user_env(payload.headers)
+    resolved_headers = _normalize_http_headers(_sanitize_user_env(payload.headers))
 
     async def _capture_http_error(response: Any) -> None:
         if response.status_code >= 400:
@@ -425,8 +445,12 @@ async def list_mcp_tool_schemas(
             {
                 "name": t.name,
                 "description": (getattr(t, "description", None) or "").strip(),
-                "inputSchema": getattr(t, "inputSchema", None)
-                or {"type": "object", "properties": {}},
+                # [SDK Compatibility] mcp.types.Tool exposes `input_schema` (snake_case)
+                "inputSchema": (
+                    getattr(t, "inputSchema", None)
+                    or getattr(t, "input_schema", None)
+                    or {"type": "object", "properties": {}}
+                ),
             }
             for t in getattr(tools_result, "tools", [])
         ]

@@ -116,6 +116,55 @@ class SessionService:
         self.db.refresh(message)
         return message
 
+    def update_rolling_summary(
+        self,
+        session_id: str,
+        summary: str,
+        summarized_count: int,
+    ) -> ConversationSession:
+        """Persists an updated rolling conversation summary and covered message count.
+
+        Args:
+            session_id (str): Target session UUID string identifier.
+            summary (str): Condensed summary text covering older conversation turns.
+            summarized_count (int): Total number of earliest messages folded into `summary`.
+
+        Returns:
+            ConversationSession: Updated conversation session ORM instance.
+
+        Raises:
+            DomainError: If no session with the specified identifier exists.
+        """
+        db_session = self.get_session(session_id)
+        db_session.rolling_summary = summary
+        db_session.summary_message_count = max(0, summarized_count)
+        self.db.commit()
+        self.db.refresh(db_session)
+        return db_session
+
+    def update_working_state(
+        self,
+        session_id: str,
+        working_state: dict[str, object],
+    ) -> ConversationSession:
+        """Persists structured working state isolated from narrative conversation summaries.
+
+        Args:
+            session_id (str): Target session UUID string identifier.
+            working_state (dict[str, object]): Structured state dictionary to store.
+
+        Returns:
+            ConversationSession: Updated conversation session ORM instance.
+
+        Raises:
+            DomainError: If no session with the specified identifier exists.
+        """
+        db_session = self.get_session(session_id)
+        db_session.working_state = working_state
+        self.db.commit()
+        self.db.refresh(db_session)
+        return db_session
+
     def delete_session(self, session_id: str) -> bool:
         """Deletes a conversation session and all its associated messages.
 

@@ -42,7 +42,7 @@ export function useAssistantConfig({
     assistantToEdit?.model?.enable_reasoning ?? assistantToEdit?.enable_reasoning ?? config.enableReasoning ?? false,
   );
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(
-    assistantToEdit?.model?.reasoning_effort ?? assistantToEdit?.reasoning_effort ?? config.reasoningEffort ?? "low",
+    assistantToEdit?.model?.reasoning_effort ?? assistantToEdit?.reasoning_effort ?? config.reasoningEffort ?? "medium",
   );
   const [systemPrompt, setSystemPrompt] = useState<string>(
     assistantToEdit?.instructions || (assistantToEdit as any)?.system_prompt || config.systemPrompt || "",
@@ -112,7 +112,7 @@ export function useAssistantConfig({
         assistantToEdit.model?.enable_reasoning ?? assistantToEdit.enable_reasoning ?? false,
       );
       setReasoningEffort(
-        assistantToEdit.model?.reasoning_effort ?? assistantToEdit.reasoning_effort ?? "low",
+        assistantToEdit.model?.reasoning_effort ?? assistantToEdit.reasoning_effort ?? "medium",
       );
       setSystemPrompt(assistantToEdit.instructions || (assistantToEdit as any).system_prompt || "");
       setIsDefault(assistantToEdit.is_default || false);
@@ -167,6 +167,8 @@ export function useAssistantConfig({
       setIsDefault(false);
       setActiveModel("");
       setApiKeys({});
+      setEnableReasoning(false);
+      setReasoningEffort("medium");
     }
   }, [assistantToEdit]);
 

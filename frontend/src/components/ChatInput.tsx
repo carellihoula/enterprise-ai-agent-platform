@@ -47,7 +47,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onOpenAssistantPicker,
   activeAssistantName,
   enableReasoning = false,
-  reasoningEffort = 'low',
+  reasoningEffort = 'medium',
   onReasoningEffortChange,
 }) => {
   const [prompt, setPrompt] = useState('');

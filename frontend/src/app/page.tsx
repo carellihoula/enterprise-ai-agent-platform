@@ -37,6 +37,7 @@ export default function EnterpriseAppPage() {
     providerId: PRESET_PROVIDERS[0].id,
     modelName: PRESET_PROVIDERS[0].defaultModel,
     temperature: 0.7,
+    reasoningEffort: "medium",
     availableModels: [],
   });
 
@@ -200,7 +201,7 @@ export default function EnterpriseAppPage() {
                 onOpenAssistantPicker={() => setIsAgentPickerOpen(true)}
                 activeAssistantName={activeAgent?.name}
                 enableReasoning={Boolean(modelConfig.enableReasoning)}
-                reasoningEffort={modelConfig.reasoningEffort ?? "low"}
+                reasoningEffort={modelConfig.reasoningEffort ?? "medium"}
                 onReasoningEffortChange={(effort) =>
                   handleUpdateModelConfig({ ...modelConfig, reasoningEffort: effort })
                 }

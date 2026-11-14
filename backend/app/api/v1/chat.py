@@ -4,6 +4,7 @@ This module provides the /chat and /chat/stream FastAPI endpoints for interactin
 with LLM providers behind the ModelProvider abstraction layer.
 """
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
@@ -18,6 +19,13 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal, get_db
 from app.core.security import decrypt_api_key
 from app.engine.langchain_tools import build_langchain_tools_for_agent, run_agent_tool_loop
+from app.engine.long_term_memory import consolidate_turn_memories, format_long_term_memory_block
+from app.engine.short_term_memory import (
+    build_short_term_context,
+    extract_working_state_updates,
+    maybe_update_rolling_summary,
+    resolve_history_token_budget,
+)
 from app.models.entities import Agent
 from app.providers.llm.base import (
     ChatMessage,
@@ -27,9 +35,12 @@ from app.providers.llm.base import (
     ModelResponse,
 )
 from app.providers.llm.langchain_provider import LangChainModelProvider, ProviderAdapterRegistry
+from app.services.memory_service import MemoryService
 from app.services.session_service import SessionService
 
 logger = logging.getLogger(__name__)
+_BACKGROUND_MEMORY_TASKS: set[asyncio.Task[Any]] = set()
+_SESSION_MEMORY_LOCKS: dict[str, asyncio.Lock] = {}
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 settings = get_settings()
@@ -102,7 +113,7 @@ def _get_provider(
     max_tokens: int | None = None,
     system_instruction: str | None = None,
     enable_reasoning: bool = False,
-    reasoning_effort: Literal["low", "medium", "high"] = "low",
+    reasoning_effort: Literal["low", "medium", "high"] = "medium",
 ) -> ModelProvider:
     """Factory helper to instantiate a concrete ModelProvider instance via ProviderAdapterRegistry.
 
@@ -167,19 +178,59 @@ def _prepare_messages_context(
     request_messages: list[ChatMessage],
     session_id: str | None,
     db: Session,
-) -> tuple[list[ChatMessage], str | None]:
-    """Prepares conversation history by combining persisted session history and new messages.
+    *,
+    model_name: str | None = None,
+    system_prompt: str | None = None,
+    tools: list[Any] | None = None,
+    max_output_tokens: int | None = None,
+    agent_id: str | None = None,
+) -> tuple[list[ChatMessage], str | None, int]:
+    """Prepares conversation history using the sentinel, long-term memory, working state, and summary.
 
     Args:
         request_messages (list[ChatMessage]): User-provided payload messages.
         session_id (str | None): Optional existing session UUID.
         db (Session): Database session instance.
+        model_name (str | None, optional): Active LLM model identifier for window sizing.
+        system_prompt (str | None, optional): Sanctuarized base system instructions.
+        tools (list[Any] | None, optional): Bound tools whose schemas consume prompt tokens.
+        max_output_tokens (int | None, optional): Requested max completion tokens.
+        agent_id (str | None, optional): Active Agent UUID for long-term memory scoping.
 
     Returns:
-        tuple[list[ChatMessage], str | None]: Context messages array and validated session ID.
+        tuple[list[ChatMessage], str | None, int]: Context messages array, validated session ID,
+            and computed short-term history token budget.
     """
+    latest_user_query = next(
+        (m.content for m in reversed(request_messages) if m.role == MessageRole.USER),
+        "",
+    )
+    lt_block: str | None = None
+    try:
+        lt_memories = MemoryService(db).retrieve_relevant_memories(
+            query=latest_user_query, agent_id=agent_id, limit=6
+        )
+        lt_block = format_long_term_memory_block(lt_memories)
+    except Exception as exc:
+        logger.warning(f"[LongTermMemory] Retrieval failed: {exc}")
+
+    effective_system_prompt = (
+        f"{system_prompt or ''}\n\n{lt_block}".strip() if lt_block else system_prompt
+    )
+    history_budget = resolve_history_token_budget(
+        model_name=model_name,
+        system_prompt=effective_system_prompt,
+        tools=tools,
+        request_messages=request_messages,
+        max_output_tokens=max_output_tokens,
+    )
     if not session_id:
-        return request_messages, None
+        base_msgs = (
+            [ChatMessage(role=MessageRole.SYSTEM, content=lt_block), *request_messages]
+            if lt_block
+            else request_messages
+        )
+        return base_msgs, None, history_budget
 
     service = SessionService(db)
     # [Validation] Fetch session to confirm existence and obtain historical messages
@@ -188,10 +239,147 @@ def _prepare_messages_context(
     historical_messages = [
         ChatMessage(role=MessageRole(m.role), content=m.content) for m in session.messages
     ]
+    working_state = session.working_state or None
+    history_budget = resolve_history_token_budget(
+        model_name=model_name,
+        system_prompt=effective_system_prompt,
+        tools=tools,
+        request_messages=request_messages,
+        working_state=working_state,
+        max_output_tokens=max_output_tokens,
+    )
 
-    # [Context] Combine existing session history with incoming request messages
-    full_messages = historical_messages + request_messages
-    return full_messages, session.id
+    # [Short-Term Memory] Combine rolling summary, working state, bounded history, and new messages
+    full_messages = build_short_term_context(
+        historical_messages=historical_messages,
+        request_messages=request_messages,
+        rolling_summary=session.rolling_summary,
+        summary_message_count=session.summary_message_count,
+        working_state=working_state,
+        max_history_tokens=history_budget,
+    )
+    if lt_block:
+        full_messages = [ChatMessage(role=MessageRole.SYSTEM, content=lt_block), *full_messages]
+    return full_messages, session.id, history_budget
+
+
+async def _run_background_memory_maintenance(
+    session_id: str,
+    agent_id: str | None,
+    user_text: str,
+    assistant_content: str,
+    trace_steps: list[dict[str, Any]] | None,
+    provider: ModelProvider,
+    history_budget: int | None,
+    message_count: int,
+) -> None:
+    """Runs rolling-summary compression and long-term memory consolidation asynchronously.
+
+    Args:
+        session_id (str): Target conversation session UUID string.
+        agent_id (str | None): Active Agent UUID scoping long-term memories.
+        user_text (str): Latest user message text.
+        assistant_content (str): Final generated assistant response text.
+        trace_steps (list[dict[str, Any]] | None): Recorded reasoning/tool steps.
+        provider (ModelProvider): Active LLM provider used for summarization/consolidation.
+        history_budget (int | None): Sentinel-computed history token budget.
+        message_count (int): Total persisted message count for periodic batch cadence.
+    """
+    lock = _SESSION_MEMORY_LOCKS.setdefault(session_id, asyncio.Lock())
+    async with lock:
+        bg_db = SessionLocal()
+        try:
+            try:
+                if history_budget is not None:
+                    await maybe_update_rolling_summary(
+                        session_id=session_id,
+                        db=bg_db,
+                        provider=provider,
+                        max_history_tokens=history_budget,
+                    )
+                else:
+                    await maybe_update_rolling_summary(
+                        session_id=session_id, db=bg_db, provider=provider
+                    )
+            except Exception as exc:
+                logger.warning(f"[ShortTermMemory] Skipping rolling summary update: {exc}")
+
+            try:
+                await consolidate_turn_memories(
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    user_text=user_text,
+                    assistant_text=assistant_content,
+                    recorded_steps=trace_steps,
+                    db=bg_db,
+                    provider=provider,
+                    message_count=message_count,
+                )
+            except Exception as exc:
+                logger.warning(f"[LongTermMemory] Skipping turn memory consolidation: {exc}")
+        finally:
+            bg_db.close()
+
+
+async def _persist_chat_turn(
+    db: Session,
+    session_id: str,
+    request_messages: list[ChatMessage],
+    assistant_content: str,
+    provider: ModelProvider,
+    trace_steps: list[dict[str, Any]] | None = None,
+    history_budget: int | None = None,
+    agent_id: str | None = None,
+) -> None:
+    """Persists messages & working state synchronously, then schedules memory maintenance.
+
+    Args:
+        db (Session): Active SQLAlchemy database session.
+        session_id (str): Target conversation session UUID string.
+        request_messages (list[ChatMessage]): Incoming user messages for this turn.
+        assistant_content (str): Final generated assistant response text.
+        provider (ModelProvider): Active LLM provider used for summarization/consolidation.
+        trace_steps (list[dict[str, Any]] | None, optional): Recorded reasoning/tool steps.
+        history_budget (int | None, optional): Sentinel-computed history token budget.
+        agent_id (str | None, optional): Active Agent UUID scoping long-term memories.
+    """
+    service = SessionService(db)
+    for msg in request_messages:
+        service.add_message(session_id, msg.role, msg.content)
+    service.add_message(
+        session_id,
+        "assistant",
+        assistant_content,
+        trace_steps=trace_steps,
+    )
+    session = service.get_session(session_id)
+    message_count = len(session.messages)
+    if trace_steps:
+        updated_state = extract_working_state_updates(
+            trace_steps, existing_state=session.working_state
+        )
+        if updated_state != (session.working_state or {}):
+            service.update_working_state(session_id, updated_state)
+
+    latest_user_text = next(
+        (m.content for m in reversed(request_messages) if m.role == MessageRole.USER),
+        "",
+    )
+    # [Write-Behind] Offload LLM summarization and consolidation so SSE [DONE] fires immediately
+    task = asyncio.create_task(
+        _run_background_memory_maintenance(
+            session_id=session_id,
+            agent_id=agent_id,
+            user_text=latest_user_text,
+            assistant_content=assistant_content,
+            trace_steps=trace_steps,
+            provider=provider,
+            history_budget=history_budget,
+            message_count=message_count,
+        )
+    )
+    _BACKGROUND_MEMORY_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_MEMORY_TASKS.discard)
 
 
 def _resolve_provider_credentials(
@@ -356,11 +544,11 @@ async def generate_chat(
         else (target_agent.enable_reasoning if target_agent else False)
     )
     raw_effort = request.reasoning_effort or (
-        target_agent.reasoning_effort if target_agent else "low"
+        target_agent.reasoning_effort if target_agent else "medium"
     )
     resolved_reasoning_effort = cast(
         Literal["low", "medium", "high"],
-        raw_effort if raw_effort in ("low", "medium", "high") else "low",
+        raw_effort if raw_effort in ("low", "medium", "high") else "medium",
     )
     provider = _get_provider(
         request.provider_name,
@@ -373,10 +561,17 @@ async def generate_chat(
         enable_reasoning=resolved_enable_reasoning,
         reasoning_effort=resolved_reasoning_effort,
     )
-    full_messages, target_session_id = _prepare_messages_context(
-        request.messages, request.session_id, db
-    )
     agent_tools = await build_langchain_tools_for_agent(target_agent, db)
+    full_messages, target_session_id, history_budget = _prepare_messages_context(
+        request.messages,
+        request.session_id,
+        db,
+        model_name=request.model_name,
+        system_prompt=resolved_system_prompt,
+        tools=agent_tools,
+        max_output_tokens=request.max_tokens,
+        agent_id=target_agent.id if target_agent else None,
+    )
 
     if agent_tools and isinstance(provider, LangChainModelProvider):
         lc_messages = provider._format_messages(full_messages, resolved_system_prompt)
@@ -393,14 +588,15 @@ async def generate_chat(
                 _record_trace_event(recorded_steps, evt)
         final_text = "".join(collected_parts)
         if target_session_id:
-            service = SessionService(db)
-            for msg in request.messages:
-                service.add_message(target_session_id, msg.role, msg.content)
-            service.add_message(
-                target_session_id,
-                "assistant",
-                final_text,
+            await _persist_chat_turn(
+                db=db,
+                session_id=target_session_id,
+                request_messages=request.messages,
+                assistant_content=final_text,
+                provider=provider,
                 trace_steps=recorded_steps or None,
+                history_budget=history_budget,
+                agent_id=target_agent.id if target_agent else None,
             )
         return ChatResponse(
             content=final_text,
@@ -420,10 +616,15 @@ async def generate_chat(
 
     # [Persistence] If session_id provided, store user prompt and assistant response
     if target_session_id:
-        service = SessionService(db)
-        for msg in request.messages:
-            service.add_message(target_session_id, msg.role, msg.content)
-        service.add_message(target_session_id, "assistant", model_response.content)
+        await _persist_chat_turn(
+            db=db,
+            session_id=target_session_id,
+            request_messages=request.messages,
+            assistant_content=model_response.content,
+            provider=provider,
+            history_budget=history_budget,
+            agent_id=target_agent.id if target_agent else None,
+        )
 
     return ChatResponse(
         content=model_response.content,
@@ -463,11 +664,11 @@ async def stream_chat(
         else (target_agent.enable_reasoning if target_agent else False)
     )
     raw_effort = request.reasoning_effort or (
-        target_agent.reasoning_effort if target_agent else "low"
+        target_agent.reasoning_effort if target_agent else "medium"
     )
     resolved_reasoning_effort = cast(
         Literal["low", "medium", "high"],
-        raw_effort if raw_effort in ("low", "medium", "high") else "low",
+        raw_effort if raw_effort in ("low", "medium", "high") else "medium",
     )
     provider = _get_provider(
         request.provider_name,
@@ -480,10 +681,17 @@ async def stream_chat(
         enable_reasoning=resolved_enable_reasoning,
         reasoning_effort=resolved_reasoning_effort,
     )
-    full_messages, target_session_id = _prepare_messages_context(
-        request.messages, request.session_id, db
-    )
     agent_tools = await build_langchain_tools_for_agent(target_agent, db)
+    full_messages, target_session_id, history_budget = _prepare_messages_context(
+        request.messages,
+        request.session_id,
+        db,
+        model_name=request.model_name,
+        system_prompt=resolved_system_prompt,
+        tools=agent_tools,
+        max_output_tokens=request.max_tokens,
+        agent_id=target_agent.id if target_agent else None,
+    )
 
     async def event_generator() -> AsyncGenerator[str, None]:
         """Async generator formatting chunks into SSE event lines and persisting messages."""
@@ -541,14 +749,15 @@ async def stream_chat(
             if target_session_id and (accumulated_content or recorded_steps):
                 db_session = SessionLocal()
                 try:
-                    service = SessionService(db_session)
-                    for msg in request.messages:
-                        service.add_message(target_session_id, msg.role, msg.content)
-                    service.add_message(
-                        target_session_id,
-                        "assistant",
-                        accumulated_content,
+                    await _persist_chat_turn(
+                        db=db_session,
+                        session_id=target_session_id,
+                        request_messages=request.messages,
+                        assistant_content=accumulated_content,
+                        provider=provider,
                         trace_steps=recorded_steps or None,
+                        history_budget=history_budget,
+                        agent_id=target_agent.id if target_agent else None,
                     )
                     logger.info(f"[Stream] Saved messages to session_id='{target_session_id}'")
                 finally:

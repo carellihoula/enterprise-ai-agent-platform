@@ -179,7 +179,7 @@ class LangChainModelProvider(ModelProvider):
 
             # [Reasoning Effort Mapping] Translate low/medium/high into provider token budgets
             effort_budgets = {"low": 1024, "medium": 4096, "high": 16384}
-            budget_tokens = effort_budgets.get(config.reasoning_effort, 1024)
+            budget_tokens = effort_budgets.get(config.reasoning_effort, 4096)
 
             # [Explicit Reasoning Flag] Enable native provider reasoning only when configured on the assistant/model
             if (

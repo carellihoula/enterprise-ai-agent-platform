@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.agents import router as agents_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.mcp import router as mcp_router
+from app.api.v1.memories import router as memories_router
 from app.api.v1.sessions import router as sessions_router
 from app.api.v1.tools import router as tools_router
 from app.core.config import get_settings
@@ -61,6 +62,7 @@ app.include_router(chat_router, prefix=settings.api_v1_prefix)
 app.include_router(sessions_router, prefix=settings.api_v1_prefix)
 app.include_router(agents_router, prefix=settings.api_v1_prefix)
 app.include_router(mcp_router, prefix=settings.api_v1_prefix)
+app.include_router(memories_router, prefix=settings.api_v1_prefix)
 app.include_router(tools_router, prefix=settings.api_v1_prefix)
 
 

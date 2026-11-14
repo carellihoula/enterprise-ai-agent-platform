@@ -33,7 +33,7 @@ export const ChatPlaygroundView: React.FC<ChatPlaygroundViewProps> = ({
   onOpenAssistantPicker,
   activeAssistantName,
   enableReasoning = false,
-  reasoningEffort = "low",
+  reasoningEffort = "medium",
   onReasoningEffortChange,
 }) => {
   const chatScrollRef = useRef<HTMLDivElement>(null);

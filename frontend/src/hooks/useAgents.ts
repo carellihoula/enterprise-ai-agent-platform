@@ -61,7 +61,7 @@ export function useAgents({ onSyncModelConfig }: UseAgentsProps = {}) {
       modelName: agent.model?.model_name || (agent as any).model_name,
       temperature: agent.model?.temperature ?? (agent as any).temperature ?? 0.7,
       enableReasoning: agent.model?.enable_reasoning ?? (agent as any).enable_reasoning ?? false,
-      reasoningEffort: agent.model?.reasoning_effort ?? (agent as any).reasoning_effort ?? "low",
+      reasoningEffort: agent.model?.reasoning_effort ?? (agent as any).reasoning_effort ?? "medium",
       systemPrompt: agent.instructions || (agent as any).system_prompt || undefined,
       baseUrl: agent.model?.base_url || (agent as any).base_url || undefined,
       apiKey: agent.model?.api_key || (agent as any).masked_api_key || undefined,
