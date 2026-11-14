@@ -49,6 +49,37 @@ def test_evaluate_tool_call_enforces_lists_sql_and_hitl() -> None:
     )
 
 
+def test_evaluate_tool_call_supports_explicit_wildcards_without_collisions() -> None:
+    """Verifies exact names and explicit `*` wildcards without short-name collisions."""
+    policy = AgentPolicyConfig(
+        blocked_tools=["builtin_only", "srv_a__*", "*destroy*", "*__blocked_mcp"],
+        allowed_tools=["builtin_only", "srv_b__*", "web_*", "srv_a__read", "mail__*"],
+        require_approval_tools=["srv_b__exec_*", "*__send_email"],
+    )
+
+    # [Collision Safety] Exact name `builtin_only` must NOT block `<server>__builtin_only`
+    assert evaluate_tool_call("builtin_only", {}, policy).decision == "deny"
+    assert evaluate_tool_call("srv_b__builtin_only", {}, policy).decision == "allow"
+
+    # [Explicit MCP Wildcard] `*__blocked_mcp` blocks MCP tool without blocking builtin `blocked_mcp`
+    assert evaluate_tool_call("srv_b__blocked_mcp", {}, policy).decision == "deny"
+
+    # [Wildcard Prefix] `<server>__*` matches every tool from that server
+    assert evaluate_tool_call("srv_a__read", {}, policy).decision == "deny"
+
+    # [Wildcard Both Sides] `*destroy*` matches substring anywhere
+    assert evaluate_tool_call("srv_b__soft_destroy_item", {}, policy).decision == "deny"
+
+    # [Allowlist + Wildcard] Matches `web_*` and `srv_b__*`
+    assert evaluate_tool_call("web_search", {}, policy).decision == "allow"
+    assert evaluate_tool_call("srv_b__query", {}, policy).decision == "allow"
+    assert evaluate_tool_call("other_tool", {}, policy).decision == "deny"
+
+    # [Approval Wildcard]
+    assert evaluate_tool_call("srv_b__exec_sql", {}, policy).decision == "require_approval"
+    assert evaluate_tool_call("mail__send_email", {}, policy).decision == "require_approval"
+
+
 def test_scan_prompt_injection_and_wrapping() -> None:
     """Verifies prompt-injection detection and untrusted tool output isolation."""
     clean = "The quarterly revenue was $1.2M."

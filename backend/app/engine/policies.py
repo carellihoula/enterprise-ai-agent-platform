@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import logging
 import re
 import uuid
@@ -137,6 +138,37 @@ def _extract_sql_candidate(tool_name: str, args: dict[str, Any]) -> str:
     return ""
 
 
+def _matches_tool_pattern(tool_name: str, pattern: str) -> bool:
+    """Checks whether a tool name matches an exact name or explicit wildcard pattern.
+
+    Args:
+        tool_name (str): Runtime tool identifier (e.g., `<server>__<tool>` or builtin name).
+        pattern (str): User-configured rule supporting exact names or `*` / `?` wildcards.
+
+    Returns:
+        bool: True if `tool_name` matches `pattern`.
+    """
+    normalized_tool = tool_name.strip().lower()
+    normalized_pattern = pattern.strip().lower()
+    if not normalized_pattern:
+        return False
+
+    return fnmatch.fnmatchcase(normalized_tool, normalized_pattern)
+
+
+def _matches_any_tool_pattern(tool_name: str, patterns: list[str]) -> bool:
+    """Checks whether `tool_name` matches any pattern in `patterns`.
+
+    Args:
+        tool_name (str): Runtime tool identifier.
+        patterns (list[str]): List of exact, short-name, or wildcard patterns.
+
+    Returns:
+        bool: True if any pattern matches `tool_name`.
+    """
+    return any(_matches_tool_pattern(tool_name, pat) for pat in patterns)
+
+
 def evaluate_tool_call(
     tool_name: str,
     args: dict[str, Any],
@@ -155,13 +187,13 @@ def evaluate_tool_call(
     if policy is None:
         return ToolPolicyDecision(decision="allow")
 
-    if tool_name in policy.blocked_tools:
+    if _matches_any_tool_pattern(tool_name, policy.blocked_tools):
         return ToolPolicyDecision(
             decision="deny",
             reason=f"Tool '{tool_name}' is blocked by agent governance policy.",
         )
 
-    if policy.allowed_tools and tool_name not in policy.allowed_tools:
+    if policy.allowed_tools and not _matches_any_tool_pattern(tool_name, policy.allowed_tools):
         return ToolPolicyDecision(
             decision="deny",
             reason=f"Tool '{tool_name}' is not in the agent's allowed_tools list.",
@@ -175,7 +207,7 @@ def evaluate_tool_call(
             reason="Mutating SQL statements are blocked because read_only_sql policy is active.",
         )
 
-    if tool_name in policy.require_approval_tools:
+    if _matches_any_tool_pattern(tool_name, policy.require_approval_tools):
         return ToolPolicyDecision(
             decision="require_approval",
             reason=f"Tool '{tool_name}' requires explicit human approval.",
