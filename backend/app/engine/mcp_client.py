@@ -235,21 +235,21 @@ async def _list_tools_from_session(session: ClientSession) -> list[McpToolInfo]:
 
 
 async def _run_session_with_callback(
-    read_stream: object,
-    write_stream: object,
+    read_stream: Any,
+    write_stream: Any,
     callback: Callable[[ClientSession], Awaitable[T]],
 ) -> T:
     """Initializes an MCP ClientSession and invokes the supplied async callback.
 
     Args:
-        read_stream (object): MCP transport receive stream.
-        write_stream (object): MCP transport send stream.
+        read_stream (Any): MCP transport receive stream.
+        write_stream (Any): MCP transport send stream.
         callback (Callable[[ClientSession], Awaitable[T]]): Operation to execute on the session.
 
     Returns:
         T: Result returned by the callback.
     """
-    async with ClientSession(read_stream, write_stream) as session:  # type: ignore[arg-type]
+    async with ClientSession(read_stream, write_stream) as session:
         await session.initialize()
         return await callback(session)
 
