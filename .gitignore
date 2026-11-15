@@ -33,6 +33,9 @@ frontend/out/
 frontend/build/
 .pnpm-store/
 
+# backend
+backend/uploads/
+
 # Environment Variables & Secrets
 .env
 .env.local

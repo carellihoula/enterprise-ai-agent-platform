@@ -5,7 +5,7 @@
  * loading session details, and streaming chat completions via Server-Sent Events (SSE).
  */
 
-import { Message, Session } from '@/types/chat';
+import { ChatAttachment, Message, Session } from '@/types/chat';
 import {
   Agent,
   AgentCreatePayload,
@@ -82,6 +82,7 @@ export interface StreamChatParams {
   systemInstruction?: string;
   apiKey?: string;
   baseUrl?: string;
+  attachmentIds?: string[];
   abortSignal?: AbortSignal;
   onChunk: (delta: string) => void;
   onToolEvent?: (event: ChatToolEvent) => void;
@@ -102,6 +103,7 @@ export async function streamChatCompletion({
   systemInstruction,
   apiKey,
   baseUrl,
+  attachmentIds,
   abortSignal,
   onChunk,
   onToolEvent,
@@ -126,6 +128,7 @@ export async function streamChatCompletion({
         system_instruction: systemInstruction || undefined,
         api_key: apiKey || undefined,
         base_url: baseUrl || undefined,
+        attachment_ids: attachmentIds?.length ? attachmentIds : undefined,
       }),
     });
 
@@ -374,4 +377,44 @@ export async function resolveToolApproval(
     throw new Error(`Failed to resolve tool approval (${res.status}): ${errText}`);
   }
   return res.json();
+}
+
+export function getAttachmentContentUrl(attachmentId: string): string {
+  return `${API_BASE_URL}/attachments/${attachmentId}/content`;
+}
+
+export async function uploadChatAttachment(
+  file: File,
+  sessionId?: string,
+): Promise<ChatAttachment> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (sessionId) {
+    formData.append('session_id', sessionId);
+  }
+  const res = await fetch(`${API_BASE_URL}/attachments`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    let detail = `Failed to upload file (${res.status})`;
+    try {
+      const errJson = await res.json();
+      detail = errJson.message || errJson.detail || detail;
+    } catch {
+      const text = await res.text();
+      if (text) detail = text;
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+export async function deleteChatAttachment(attachmentId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/attachments/${attachmentId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`Failed to delete attachment (${res.status})`);
+  }
 }

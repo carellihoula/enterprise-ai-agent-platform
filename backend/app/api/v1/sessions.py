@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.api.v1.attachments import AttachmentResponse
 from app.core.database import get_db
 from app.services.session_service import SessionService
 
@@ -46,6 +47,9 @@ class SessionMessageResponse(BaseModel):
     content: str = Field(description="Textual content of the message")
     trace_steps: list[dict[str, Any]] | None = Field(
         default=None, description="Persisted reasoning and tool execution trace steps"
+    )
+    attachments: list[AttachmentResponse] = Field(
+        default_factory=list, description="Attached files or images associated with this message"
     )
     created_at: datetime = Field(description="Timestamp when message was created")
 
@@ -166,6 +170,10 @@ async def get_session(
                 role=m.role,
                 content=m.content,
                 trace_steps=m.trace_steps,
+                attachments=[
+                    AttachmentResponse.model_validate(att)
+                    for att in (getattr(m, "attachments", None) or [])
+                ],
                 created_at=m.created_at,
             )
             for m in session.messages

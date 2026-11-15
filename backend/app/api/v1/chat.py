@@ -33,7 +33,7 @@ from app.engine.short_term_memory import (
     maybe_update_rolling_summary,
     resolve_history_token_budget,
 )
-from app.models.entities import Agent
+from app.models.entities import Agent, ChatAttachment
 from app.providers.llm.base import (
     ChatMessage,
     MessageRole,
@@ -42,6 +42,11 @@ from app.providers.llm.base import (
     ModelResponse,
 )
 from app.providers.llm.langchain_provider import LangChainModelProvider, ProviderAdapterRegistry
+from app.services.attachment_service import (
+    MAX_ATTACHMENTS_PER_MESSAGE,
+    format_attached_file_prompt,
+    get_attachment_base64_data_uri,
+)
 from app.services.memory_service import MemoryService
 from app.services.session_service import SessionService
 
@@ -89,6 +94,10 @@ class ChatRequest(BaseModel):
     assistant_id: str | None = Field(default=None, description="Deprecated alias for agent_id")
     api_key: str | None = Field(default=None, description="Optional client API key")
     base_url: str | None = Field(default=None, description="Optional custom base URL endpoint")
+    attachment_ids: list[str] = Field(
+        default_factory=list,
+        description="Optional uploaded attachment UUIDs attached to the latest user turn",
+    )
 
 
 class ChatResponse(BaseModel):
@@ -328,6 +337,83 @@ async def _run_background_memory_maintenance(
             bg_db.close()
 
 
+def _attach_files_to_last_user_message(
+    db: Session,
+    attachment_ids: list[str],
+    full_messages: list[ChatMessage],
+    dlp_active: bool = False,
+) -> None:
+    """Enriches the latest user ChatMessage with text files, images, and PDFs.
+
+    Args:
+        db (Session): Active SQLAlchemy database session.
+        attachment_ids (list[str]): Ordered list of uploaded attachment UUIDs.
+        full_messages (list[ChatMessage]): Prepared context messages sent to the LLM.
+        dlp_active (bool, optional): Whether to apply DLP redaction to extracted text.
+    """
+    if not attachment_ids:
+        return
+    if len(attachment_ids) > MAX_ATTACHMENTS_PER_MESSAGE:
+        raise DomainError(
+            message=f"Maximum {MAX_ATTACHMENTS_PER_MESSAGE} attachments allowed per message.",
+            error_code="TOO_MANY_ATTACHMENTS",
+            status_code=400,
+        )
+
+    rows = db.query(ChatAttachment).filter(ChatAttachment.id.in_(attachment_ids)).all()
+    by_id = {row.id: row for row in rows}
+    ordered = [by_id[aid] for aid in attachment_ids if aid in by_id]
+    if not ordered:
+        return
+
+    target_idx = next(
+        (
+            i
+            for i in range(len(full_messages) - 1, -1, -1)
+            if full_messages[i].role == MessageRole.USER
+        ),
+        None,
+    )
+    if target_idx is None:
+        return
+
+    target_msg = full_messages[target_idx]
+    text_sections: list[str] = []
+    multimodal_blocks: list[dict[str, Any]] = []
+
+    for att in ordered:
+        if att.is_image:
+            data_uri = get_attachment_base64_data_uri(att)
+            if data_uri:
+                multimodal_blocks.append({"type": "image_url", "data_uri": data_uri})
+        elif att.is_pdf:
+            data_uri = get_attachment_base64_data_uri(att)
+            base64_raw = data_uri.split(",", 1)[1] if data_uri and "," in data_uri else None
+            multimodal_blocks.append(
+                {
+                    "type": "pdf",
+                    "filename": att.filename,
+                    "data_uri": data_uri,
+                    "base64_data": base64_raw,
+                    "fallback_text": format_attached_file_prompt(att, dlp_active=dlp_active),
+                }
+            )
+        else:
+            text_sections.append(format_attached_file_prompt(att, dlp_active=dlp_active))
+
+    updated_content = target_msg.content
+    if text_sections:
+        joined = "\n\n".join(text_sections)
+        updated_content = f"{updated_content}\n\n{joined}" if updated_content else joined
+
+    full_messages[target_idx] = target_msg.model_copy(
+        update={
+            "content": updated_content,
+            "content_blocks": multimodal_blocks or None,
+        }
+    )
+
+
 async def _persist_chat_turn(
     db: Session,
     session_id: str,
@@ -338,6 +424,7 @@ async def _persist_chat_turn(
     history_budget: int | None = None,
     agent_id: str | None = None,
     policy: AgentPolicyConfig | None = None,
+    attachment_ids: list[str] | None = None,
 ) -> None:
     """Persists messages & working state synchronously, then schedules memory maintenance.
 
@@ -367,9 +454,22 @@ async def _persist_chat_turn(
         ]
 
     service = SessionService(db)
+    last_user_msg_id: str | None = None
     for msg in request_messages:
         clean_content = redact_sensitive_data(msg.content) if dlp_active else msg.content
-        service.add_message(session_id, msg.role, clean_content)
+        saved_msg = service.add_message(session_id, msg.role, clean_content)
+        if msg.role == MessageRole.USER:
+            last_user_msg_id = saved_msg.id
+    if attachment_ids and last_user_msg_id:
+        (
+            db.query(ChatAttachment)
+            .filter(ChatAttachment.id.in_(attachment_ids))
+            .update(
+                {"session_id": session_id, "message_id": last_user_msg_id},
+                synchronize_session=False,
+            )
+        )
+        db.commit()
     service.add_message(
         session_id,
         "assistant",
@@ -630,6 +730,12 @@ async def generate_chat(
         max_output_tokens=request.max_tokens,
         agent_id=target_agent.id if target_agent else None,
     )
+    _attach_files_to_last_user_message(
+        db,
+        request.attachment_ids,
+        full_messages,
+        dlp_active=agent_policy.dlp_filter_active,
+    )
 
     if agent_tools and isinstance(provider, LangChainModelProvider):
         lc_messages = provider._format_messages(full_messages, resolved_system_prompt)
@@ -662,6 +768,7 @@ async def generate_chat(
                 history_budget=history_budget,
                 agent_id=target_agent.id if target_agent else None,
                 policy=agent_policy,
+                attachment_ids=request.attachment_ids,
             )
         return ChatResponse(
             content=final_text,
@@ -690,6 +797,7 @@ async def generate_chat(
             history_budget=history_budget,
             agent_id=target_agent.id if target_agent else None,
             policy=agent_policy,
+            attachment_ids=request.attachment_ids,
         )
 
     return ChatResponse(
@@ -758,6 +866,12 @@ async def stream_chat(
         tools=agent_tools,
         max_output_tokens=request.max_tokens,
         agent_id=target_agent.id if target_agent else None,
+    )
+    _attach_files_to_last_user_message(
+        db,
+        request.attachment_ids,
+        full_messages,
+        dlp_active=agent_policy.dlp_filter_active,
     )
 
     async def event_generator() -> AsyncGenerator[str, None]:
@@ -833,6 +947,7 @@ async def stream_chat(
                         history_budget=history_budget,
                         agent_id=target_agent.id if target_agent else None,
                         policy=agent_policy,
+                        attachment_ids=request.attachment_ids,
                     )
                     logger.info(f"[Stream] Saved messages to session_id='{target_session_id}'")
                 finally:

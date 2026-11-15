@@ -20,11 +20,24 @@ export interface PendingApproval {
   reason?: string;
 }
 
+export interface ChatAttachment {
+  id: string;
+  session_id?: string | null;
+  message_id?: string | null;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  is_image: boolean;
+  is_pdf: boolean;
+  created_at?: string;
+}
+
 export interface Message {
   id?: string;
   role: "user" | "assistant" | "system";
   content: string;
   created_at?: string;
+  attachments?: ChatAttachment[];
   toolCalls?: ToolExecutionBadge[];
   trace_steps?: ToolExecutionBadge[];
 }

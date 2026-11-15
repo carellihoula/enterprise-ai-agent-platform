@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Message, Session, ModelConfigState, PendingApproval } from "@/types/chat";
+import { Message, Session, ModelConfigState, PendingApproval, ChatAttachment } from "@/types/chat";
 import {
   fetchSessions,
   createSession,
@@ -7,6 +7,8 @@ import {
   deleteSession,
   streamChatCompletion,
   resolveToolApproval,
+  uploadChatAttachment,
+  deleteChatAttachment,
 } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 
@@ -35,6 +37,8 @@ export function useChatSession({
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [isResolvingApproval, setIsResolvingApproval] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -154,7 +158,13 @@ export function useChatSession({
       }
     }
 
-    const userMessage: Message = { role: "user", content };
+    const attachmentsToSend = [...pendingAttachments];
+    setPendingAttachments([]);
+    const userMessage: Message = {
+      role: "user",
+      content,
+      attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
+    };
     setMessages((prev) => [...prev, userMessage]);
     setIsStreaming(true);
     setErrorMessage(null);
@@ -190,6 +200,7 @@ export function useChatSession({
       systemInstruction: modelConfig.systemPrompt,
       apiKey,
       baseUrl,
+      attachmentIds: attachmentsToSend.map((a) => a.id),
       abortSignal: controller.signal,
       onChunk: (delta) => {
         setMessages((prev) => {
@@ -361,6 +372,48 @@ export function useChatSession({
     }
   };
 
+  const handleAttachFiles = async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
+
+    const remainingSlots = 5 - pendingAttachments.length;
+    if (remainingSlots <= 0) {
+      toast.add({
+        variant: "destructive",
+        title: "Attachment Limit",
+        description: "Maximum 5 attachments allowed per message.",
+      });
+      return;
+    }
+
+    setIsUploadingAttachment(true);
+    try {
+      const uploaded: ChatAttachment[] = [];
+      for (const file of fileArray.slice(0, remainingSlots)) {
+        const item = await uploadChatAttachment(file, currentSessionId ?? undefined);
+        uploaded.push(item);
+      }
+      setPendingAttachments((prev) => [...prev, ...uploaded]);
+    } catch (err: any) {
+      toast.add({
+        variant: "destructive",
+        title: "Upload Error",
+        description: err?.message || "Failed to upload attachment.",
+      });
+    } finally {
+      setIsUploadingAttachment(false);
+    }
+  };
+
+  const handleRemoveAttachment = async (attachmentId: string) => {
+    setPendingAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+    try {
+      await deleteChatAttachment(attachmentId);
+    } catch {
+      // Ignore cleanup failures for removed drafts
+    }
+  };
+
   return {
     sessions,
     currentSessionId,
@@ -370,6 +423,8 @@ export function useChatSession({
     isStreaming,
     pendingApproval,
     isResolvingApproval,
+    pendingAttachments,
+    isUploadingAttachment,
     errorMessage,
     setErrorMessage,
     handleSelectSession,
@@ -379,5 +434,7 @@ export function useChatSession({
     handleStopStreaming,
     handleRetryLastMessage,
     handleApprovalDecision,
+    handleAttachFiles,
+    handleRemoveAttachment,
   };
 }

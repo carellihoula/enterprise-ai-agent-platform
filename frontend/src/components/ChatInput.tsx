@@ -16,6 +16,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ReasoningEffort } from '@/types/agent';
+import { ChatAttachment } from '@/types/chat';
+import { AttachmentBadges } from '@/components/playground/AttachmentBadges';
 import {
   ArrowUp,
   Square,
@@ -36,6 +38,10 @@ interface ChatInputProps {
   enableReasoning?: boolean;
   reasoningEffort?: ReasoningEffort;
   onReasoningEffortChange?: (effort: ReasoningEffort) => void;
+  pendingAttachments?: ChatAttachment[];
+  isUploadingAttachment?: boolean;
+  onAttachFiles?: (files: FileList | File[]) => void;
+  onRemoveAttachment?: (attachmentId: string) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -49,9 +55,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   enableReasoning = false,
   reasoningEffort = 'medium',
   onReasoningEffortChange,
+  pendingAttachments = [],
+  isUploadingAttachment = false,
+  onAttachFiles,
+  onRemoveAttachment,
 }) => {
   const [prompt, setPrompt] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-resize textarea according to text height (up to max 220px)
   useEffect(() => {
@@ -63,8 +75,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!prompt.trim() || isLoading || disabled) return;
-    onSendMessage(prompt.trim());
+    if ((!prompt.trim() && pendingAttachments.length === 0) || isLoading || disabled || isUploadingAttachment) {
+      return;
+    }
+    onSendMessage(prompt.trim() || 'Please analyze the attached file(s).');
     setPrompt('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -78,21 +92,52 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!onAttachFiles || !e.clipboardData?.files?.length) return;
+    e.preventDefault();
+    onAttachFiles(e.clipboardData.files);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (!onAttachFiles || !e.dataTransfer?.files?.length) return;
+    onAttachFiles(e.dataTransfer.files);
+  };
+
   return (
     // [Layout] Align input bar width with max-w-5xl message container for visual consistency
     <div className="w-full max-w-5xl mx-auto px-4 pb-4 pt-2 bg-gradient-to-t from-white via-white/95 to-transparent shrink-0">
       <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
         className={cn(
           'relative flex flex-col bg-white border border-zinc-300 rounded-2xl shadow-xs transition-colors focus-within:border-zinc-500 focus-within:ring-1 focus-within:ring-zinc-400 p-2',
+          isDragging && 'border-zinc-900 bg-zinc-50/70',
           disabled && 'opacity-60 pointer-events-none'
         )}
       >
+        {(pendingAttachments.length > 0 || isUploadingAttachment) && (
+          <div className="px-2 pt-1 pb-2 border-b border-zinc-100 mb-1">
+            <AttachmentBadges
+              attachments={pendingAttachments}
+              isUploading={isUploadingAttachment}
+              onRemove={onRemoveAttachment}
+            />
+          </div>
+        )}
+
         {/* Input Textarea */}
         <textarea
           ref={textareaRef}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={placeholder}
           rows={1}
           disabled={isLoading || disabled}
@@ -103,10 +148,25 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <div className="flex items-center justify-between px-2 pt-1">
           {/* Left Action Attachments & Modifiers */}
           <div className="flex items-center gap-1.5">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".py,.js,.jsx,.ts,.tsx,.json,.yaml,.yml,.md,.txt,.csv,.sql,.sh,.html,.css,.xml,.toml,.ini,.log,.env,.pdf,.png,.jpg,.jpeg,.webp,.gif"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.length && onAttachFiles) {
+                  onAttachFiles(e.target.files);
+                }
+                e.target.value = '';
+              }}
+            />
             <button
               type="button"
-              title="Attach documents or knowledge data"
-              className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-md transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading || disabled || isUploadingAttachment}
+              title="Attach files, code, PDF, or images (max 5 MB)"
+              className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-md transition-colors disabled:opacity-40"
             >
               <Paperclip className="w-4 h-4" />
             </button>
@@ -163,11 +223,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 type="button"
                 size="icon"
                 onClick={() => handleSubmit()}
-                disabled={!prompt.trim() || disabled}
+                disabled={(!prompt.trim() && pendingAttachments.length === 0) || disabled || isUploadingAttachment}
                 title="Send message (Enter)"
                 className={cn(
                   'rounded-full h-7 w-7 transition-colors shadow-none',
-                  prompt.trim()
+                  (prompt.trim() || pendingAttachments.length > 0) && !isUploadingAttachment
                     ? 'bg-zinc-900 text-white hover:bg-zinc-800'
                     : 'bg-zinc-100 text-zinc-300 hover:bg-zinc-100 cursor-not-allowed'
                 )}

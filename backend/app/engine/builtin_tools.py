@@ -394,7 +394,7 @@ async def _tool_extract_pdf_text(args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Invalid PDF header.")
 
     try:
-        import pypdf  # type: ignore[import-not-found]
+        import pypdf
 
         reader = pypdf.PdfReader(io.BytesIO(raw_bytes))
         pages = [page.extract_text() or "" for page in reader.pages[:max_pages]]
@@ -403,7 +403,8 @@ async def _tool_extract_pdf_text(args: dict[str, Any]) -> dict[str, Any]:
             "extracted_pages": len(pages),
             "text": "\n\n".join(pages).strip(),
         }
-    except ImportError:
+    except Exception:
+        # [Fallback] Recover text from minimal/malformed PDFs without strict xref tables
         extracted = _extract_pdf_bytes_pure_python(raw_bytes)
         return {
             "page_count": None,

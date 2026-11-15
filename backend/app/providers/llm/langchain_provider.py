@@ -478,13 +478,87 @@ class LangChainModelProvider(ModelProvider):
         for msg in messages:
             clean_text = self._extract_text_content(msg.content)
             if msg.role == "user":
-                lc_messages.append(HumanMessage(content=clean_text))
+                if msg.content_blocks:
+                    lc_messages.append(
+                        HumanMessage(
+                            content=self._build_multimodal_user_content(
+                                clean_text, msg.content_blocks
+                            )
+                        )
+                    )
+                else:
+                    lc_messages.append(HumanMessage(content=clean_text))
             elif msg.role == "assistant":
                 lc_messages.append(AIMessage(content=clean_text))
             elif msg.role == "system":
                 lc_messages.append(SystemMessage(content=clean_text))
 
         return lc_messages
+
+    @staticmethod
+    def supports_native_pdf(provider_id: str) -> bool:
+        """Returns whether the provider natively accepts inline PDF document blocks.
+
+        Args:
+            provider_id (str): Normalized provider identifier.
+
+        Returns:
+            bool: True for OpenAI, Anthropic, Gemini, and Mistral; False for Groq/Ollama/custom.
+        """
+        return provider_id.lower() in {"openai", "anthropic", "gemini", "mistral"}
+
+    def _build_multimodal_user_content(
+        self,
+        text: str,
+        blocks: list[dict[str, Any]],
+    ) -> list[str | dict[Any, Any]]:
+        """Builds LangChain multimodal content parts with native PDF + text fallback routing.
+
+        Args:
+            text (str): Primary textual prompt from the user.
+            blocks (list[dict[str, Any]]): Attachment descriptors (`image_url` or `pdf`).
+
+        Returns:
+            list[str | dict[Any, Any]]: LangChain-compatible content blocks list.
+        """
+        parts: list[str | dict[Any, Any]] = []
+        if text:
+            parts.append({"type": "text", "text": text})
+
+        provider = self.config.provider_id.lower()
+        native_pdf = self.supports_native_pdf(provider)
+
+        for block in blocks:
+            btype = block.get("type")
+            if btype == "image_url" and block.get("data_uri"):
+                parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": str(block["data_uri"])},
+                    }
+                )
+            elif btype == "pdf":
+                if native_pdf and provider == "mistral" and block.get("data_uri"):
+                    parts.append(
+                        {
+                            "type": "document_url",
+                            "document_url": str(block["data_uri"]),
+                        }
+                    )
+                elif native_pdf and block.get("base64_data"):
+                    parts.append(
+                        {
+                            "type": "file",
+                            "source_type": "base64",
+                            "mime_type": "application/pdf",
+                            "data": str(block["base64_data"]),
+                            "filename": str(block.get("filename") or "document.pdf"),
+                        }
+                    )
+                elif block.get("fallback_text"):
+                    parts.append({"type": "text", "text": str(block["fallback_text"])})
+
+        return parts or [{"type": "text", "text": text}]
 
     async def generate(
         self,

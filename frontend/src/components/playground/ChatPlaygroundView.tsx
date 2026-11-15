@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import { Message, PendingApproval } from "@/types/chat";
+import { ChatAttachment, Message, PendingApproval } from "@/types/chat";
 import { ReasoningEffort } from "@/types/agent";
 import { ChatMessageItem } from "@/components/ChatMessageItem";
 import { ChatInput } from "@/components/ChatInput";
@@ -14,6 +14,10 @@ interface ChatPlaygroundViewProps {
   pendingApproval?: PendingApproval | null;
   isResolvingApproval?: boolean;
   onApprovalDecision?: (decision: "approve" | "reject") => void;
+  pendingAttachments?: ChatAttachment[];
+  isUploadingAttachment?: boolean;
+  onAttachFiles?: (files: FileList | File[]) => void;
+  onRemoveAttachment?: (attachmentId: string) => void;
   onSendMessage: (content: string) => void;
   onStopStreaming: () => void;
   onRetryLastMessage: () => void;
@@ -34,6 +38,10 @@ export const ChatPlaygroundView: React.FC<ChatPlaygroundViewProps> = ({
   pendingApproval,
   isResolvingApproval = false,
   onApprovalDecision,
+  pendingAttachments = [],
+  isUploadingAttachment = false,
+  onAttachFiles,
+  onRemoveAttachment,
   onSendMessage,
   onStopStreaming,
   onRetryLastMessage,
@@ -115,6 +123,10 @@ export const ChatPlaygroundView: React.FC<ChatPlaygroundViewProps> = ({
         enableReasoning={enableReasoning}
         reasoningEffort={reasoningEffort}
         onReasoningEffortChange={onReasoningEffortChange}
+        pendingAttachments={pendingAttachments}
+        isUploadingAttachment={isUploadingAttachment}
+        onAttachFiles={onAttachFiles}
+        onRemoveAttachment={onRemoveAttachment}
       />
     </>
   );

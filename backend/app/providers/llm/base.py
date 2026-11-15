@@ -75,11 +75,17 @@ class ChatMessage(BaseModel):
         role (MessageRole): Role of the message author (system, user, assistant, tool).
         content (str): Textual content of the message.
         name (str | None): Optional identifier name for tool or user attribution.
+        content_blocks (list[dict[str, Any]] | None): Optional multimodal attachment blocks
+            (images or native PDFs with text fallback) for the active turn.
     """
 
     role: MessageRole = Field(description="Role of the message author")
     content: str = Field(description="Textual content of the chat message")
     name: str | None = Field(default=None, description="Optional author or tool name identifier")
+    content_blocks: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Optional multimodal attachment blocks (images or native PDFs)",
+    )
 
 
 class TokenUsage(BaseModel):

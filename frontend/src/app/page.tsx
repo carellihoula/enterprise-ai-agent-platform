@@ -97,6 +97,8 @@ export default function EnterpriseAppPage() {
     isStreaming,
     pendingApproval,
     isResolvingApproval,
+    pendingAttachments,
+    isUploadingAttachment,
     handleSelectSession,
     handleNewSession,
     handleDeleteSession,
@@ -104,6 +106,8 @@ export default function EnterpriseAppPage() {
     handleStopStreaming,
     handleRetryLastMessage,
     handleApprovalDecision,
+    handleAttachFiles,
+    handleRemoveAttachment,
   } = useChatSession({
     modelConfig,
     activeAssistantId: activeAgent?.id,
@@ -201,6 +205,10 @@ export default function EnterpriseAppPage() {
                 pendingApproval={pendingApproval}
                 isResolvingApproval={isResolvingApproval}
                 onApprovalDecision={handleApprovalDecision}
+                pendingAttachments={pendingAttachments}
+                isUploadingAttachment={isUploadingAttachment}
+                onAttachFiles={handleAttachFiles}
+                onRemoveAttachment={handleRemoveAttachment}
                 onSendMessage={handleSendMessage}
                 onStopStreaming={handleStopStreaming}
                 onRetryLastMessage={handleRetryLastMessage}

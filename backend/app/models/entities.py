@@ -168,6 +168,12 @@ class SessionMessage(Base):
     session: Mapped["ConversationSession"] = relationship(
         "ConversationSession", back_populates="messages"
     )
+    attachments: Mapped[list["ChatAttachment"]] = relationship(
+        "ChatAttachment",
+        back_populates="message",
+        cascade="all, delete-orphan",
+        order_by="ChatAttachment.created_at",
+    )
 
 
 class McpServer(Base):
@@ -277,3 +283,55 @@ class AgentMemory(Base):
 
     # [Relationship] Optional parent Agent association
     agent: Mapped[Agent | None] = relationship("Agent")
+
+
+class ChatAttachment(Base):
+    """SQLAlchemy ORM model representing a file or image attached to a chat turn.
+
+    Attributes:
+        id (str): Primary key UUID string identifier.
+        session_id (str | None): Optional foreign key referencing ConversationSession.
+        message_id (str | None): Optional foreign key referencing SessionMessage.
+        filename (str): Sanitized original filename.
+        mime_type (str): Validated MIME type string.
+        size_bytes (int): Original upload size in bytes.
+        is_image (bool): True when the attachment is an image for Vision models.
+        is_pdf (bool): True when the attachment is a PDF document.
+        extracted_text (str | None): Extracted UTF-8/PDF text for prompt injection or fallback.
+        storage_path (str | None): Relative path on disk for binary attachments (images/PDFs).
+        created_at (datetime): Timestamp when the attachment was uploaded.
+        message (SessionMessage | None): Parent message ORM relationship.
+    """
+
+    __tablename__ = "chat_attachments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    session_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("conversation_sessions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    message_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("session_messages.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_image: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    is_pdf: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    storage_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=current_utc_time)
+
+    # [Relationship] Parent SessionMessage association
+    message: Mapped[SessionMessage | None] = relationship(
+        "SessionMessage", back_populates="attachments"
+    )
