@@ -28,6 +28,10 @@ dependencies = [
     "mcp>=2.3.0",
     "pypdf>=7.1.0",
     "python-multipart>=0.0.33",
+    "boto3>=1.35.0",
+    "python-docx>=1.1.2",
+    "openpyxl>=3.1.5",
+    "pandas>=2.2.0",
 ]
 
 [dependency-groups]
@@ -70,7 +74,7 @@ ignore = ["E501"]
 known-first-party = ["app", "agent_engine"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 mypy_path = "backend"
 explicit_package_bases = true
 warn_return_any = true
@@ -84,7 +88,21 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["yaml.*", "mcp", "mcp.*"]
+module = [
+    "yaml.*",
+    "mcp",
+    "mcp.*",
+    "boto3",
+    "boto3.*",
+    "botocore",
+    "botocore.*",
+    "docx",
+    "docx.*",
+    "openpyxl",
+    "openpyxl.*",
+    "pandas",
+    "pandas.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

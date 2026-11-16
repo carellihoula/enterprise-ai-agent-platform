@@ -343,6 +343,24 @@ async def _tool_parse_csv_excel(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def _tool_analyze_spreadsheet(args: dict[str, Any]) -> dict[str, Any]:
+    """Executes Pandas analysis code in an isolated subprocess on an uploaded CSV/XLSX attachment."""
+    from app.services.spreadsheet_sandbox import execute_spreadsheet_analysis
+
+    attachment_id = str(args.get("attachment_id", "")).strip()
+    code = str(args.get("code", "")).strip()
+    sheet_name = args.get("sheet_name")
+    if not attachment_id:
+        raise ValueError("Missing required 'attachment_id' parameter.")
+    if not code:
+        raise ValueError("Missing required 'code' parameter.")
+    return await execute_spreadsheet_analysis(
+        attachment_id=attachment_id,
+        code=code,
+        sheet_name=str(sheet_name).strip() if sheet_name else None,
+    )
+
+
 def _extract_pdf_bytes_pure_python(raw_bytes: bytes) -> str:
     """Extracts readable text operators from PDF content streams using stdlib zlib/regex."""
     import zlib
@@ -567,6 +585,40 @@ BUILTIN_TOOLS_REGISTRY: dict[str, BuiltinToolDefinition] = {
         },
         sample_args={"csv_text": "name,role,status\nAlice,Admin,Active\nBob,Viewer,Pending"},
         handler=_tool_parse_csv_excel,
+    ),
+    "analyze_spreadsheet": BuiltinToolDefinition(
+        name="analyze_spreadsheet",
+        description=(
+            "Executes Python/Pandas analysis code in an isolated sandbox against an uploaded "
+            "XLSX or CSV attachment. Pre-loads `df` (DataFrame), `pd`, `np`, `sheet_names`, "
+            "and `load_sheet(name)`. Assign `result = ...` or `print(...)` to return output."
+        ),
+        category="Data & Files",
+        parameters_schema={
+            "type": "object",
+            "required": ["attachment_id", "code"],
+            "properties": {
+                "attachment_id": {
+                    "type": "string",
+                    "description": "UUID of the uploaded .xlsx or .csv ChatAttachment.",
+                },
+                "code": {
+                    "type": "string",
+                    "description": (
+                        "Python/Pandas code operating on `df` (e.g. `result = df.describe()`)."
+                    ),
+                },
+                "sheet_name": {
+                    "type": "string",
+                    "description": "Optional Excel sheet name to load into `df`.",
+                },
+            },
+        },
+        sample_args={
+            "attachment_id": "00000000-0000-0000-0000-000000000000",
+            "code": "result = df.head(5)",
+        },
+        handler=_tool_analyze_spreadsheet,
     ),
     "extract_pdf_text": BuiltinToolDefinition(
         name="extract_pdf_text",

@@ -19,7 +19,11 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal, get_db
 from app.core.errors import DomainError
 from app.core.security import decrypt_api_key
-from app.engine.langchain_tools import build_langchain_tools_for_agent, run_agent_tool_loop
+from app.engine.langchain_tools import (
+    build_builtin_structured_tool,
+    build_langchain_tools_for_agent,
+    run_agent_tool_loop,
+)
 from app.engine.long_term_memory import consolidate_turn_memories, format_long_term_memory_block
 from app.engine.policies import (
     AgentPolicyConfig,
@@ -335,6 +339,40 @@ async def _run_background_memory_maintenance(
                 logger.warning(f"[LongTermMemory] Skipping turn memory consolidation: {exc}")
         finally:
             bg_db.close()
+
+
+def _inject_spreadsheet_tool_if_needed(
+    db: Session,
+    session_id: str | None,
+    attachment_ids: list[str] | None,
+    agent_tools: list[Any],
+) -> None:
+    """Auto-enables `analyze_spreadsheet` when CSV or XLSX attachments exist in the turn or session.
+
+    Args:
+        db (Session): Active SQLAlchemy database session.
+        session_id (str | None): Current conversation session UUID, if any.
+        attachment_ids (list[str] | None): Attachment UUIDs attached to the current turn.
+        agent_tools (list[Any]): Mutable list of resolved LangChain tools for this turn.
+    """
+    if any(getattr(t, "name", None) == "analyze_spreadsheet" for t in agent_tools):
+        return
+
+    has_spreadsheet = False
+    if attachment_ids:
+        rows = db.query(ChatAttachment.filename).filter(ChatAttachment.id.in_(attachment_ids)).all()
+        has_spreadsheet = any(row[0].lower().endswith((".xlsx", ".csv")) for row in rows if row[0])
+
+    if not has_spreadsheet and session_id:
+        rows = (
+            db.query(ChatAttachment.filename).filter(ChatAttachment.session_id == session_id).all()
+        )
+        has_spreadsheet = any(row[0].lower().endswith((".xlsx", ".csv")) for row in rows if row[0])
+
+    if has_spreadsheet:
+        tool = build_builtin_structured_tool("analyze_spreadsheet")
+        if tool:
+            agent_tools.append(tool)
 
 
 def _attach_files_to_last_user_message(
@@ -720,6 +758,7 @@ async def generate_chat(
     )
     agent_policy = parse_agent_policies(target_agent.policies if target_agent else None)
     agent_tools = await build_langchain_tools_for_agent(target_agent, db)
+    _inject_spreadsheet_tool_if_needed(db, request.session_id, request.attachment_ids, agent_tools)
     full_messages, target_session_id, history_budget = _prepare_messages_context(
         request.messages,
         request.session_id,
@@ -857,6 +896,7 @@ async def stream_chat(
     )
     agent_policy = parse_agent_policies(target_agent.policies if target_agent else None)
     agent_tools = await build_langchain_tools_for_agent(target_agent, db)
+    _inject_spreadsheet_tool_if_needed(db, request.session_id, request.attachment_ids, agent_tools)
     full_messages, target_session_id, history_budget = _prepare_messages_context(
         request.messages,
         request.session_id,

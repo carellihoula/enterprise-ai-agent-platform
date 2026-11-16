@@ -84,6 +84,34 @@ class Settings(BaseSettings):
         default=SecretStr("sqlite:///./platform.db"),
         description="Database connection URI",
     )
+    storage_backend: str = Field(
+        default="local",
+        description="Attachment storage backend ('local' for disk, 's3' for MinIO/AWS S3)",
+    )
+    s3_endpoint_url: str | None = Field(
+        default=None,
+        description="Custom S3-compatible endpoint URL (e.g., http://localhost:9000 for MinIO)",
+    )
+    s3_access_key_id: SecretStr | None = Field(
+        default=None,
+        description="Access key ID for S3 / MinIO object storage",
+    )
+    s3_secret_access_key: SecretStr | None = Field(
+        default=None,
+        description="Secret access key for S3 / MinIO object storage",
+    )
+    s3_bucket_name: str = Field(
+        default="ai-platform-uploads",
+        description="Target bucket name for S3 / MinIO object storage",
+    )
+    s3_region: str = Field(
+        default="us-east-1",
+        description="Region name for S3 / MinIO object storage",
+    )
+    s3_use_ssl: bool = Field(
+        default=False,
+        description="Whether to use TLS/SSL when connecting to the S3 endpoint",
+    )
     config_file_path: Path | None = Field(
         default=None,
         description="Path to external YAML/JSON configuration file",

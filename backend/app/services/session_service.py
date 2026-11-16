@@ -6,10 +6,17 @@ retrieving session histories, and deleting conversation sessions.
 
 from collections.abc import Sequence
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.errors import DomainError
-from app.models.entities import ConversationSession, SessionMessage, current_utc_time
+from app.models.entities import (
+    ChatAttachment,
+    ConversationSession,
+    SessionMessage,
+    current_utc_time,
+)
+from app.services.storage_service import get_storage_backend
 
 
 class SessionService:
@@ -166,7 +173,7 @@ class SessionService:
         return db_session
 
     def delete_session(self, session_id: str) -> bool:
-        """Deletes a conversation session and all its associated messages.
+        """Deletes a conversation session, its messages, and stored attachment objects.
 
         Args:
             session_id (str): UUID string identifier of the session to delete.
@@ -178,7 +185,32 @@ class SessionService:
             DomainError: If no session with the specified identifier exists.
         """
         db_session = self.get_session(session_id)
-        # [Deletion] Remove session and cascade delete all child messages
+
+        # [Cleanup] Collect object storage keys before cascade deletion removes metadata rows
+        storage_keys = {
+            row[0]
+            for row in (
+                self.db.query(ChatAttachment.storage_path)
+                .outerjoin(SessionMessage, ChatAttachment.message_id == SessionMessage.id)
+                .filter(
+                    ChatAttachment.storage_path.is_not(None),
+                    or_(
+                        ChatAttachment.session_id == session_id,
+                        SessionMessage.session_id == session_id,
+                    ),
+                )
+                .all()
+            )
+            if row[0]
+        }
+
+        # [Deletion] Remove session and cascade delete all child messages and attachments
         self.db.delete(db_session)
         self.db.commit()
+
+        if storage_keys:
+            storage = get_storage_backend()
+            for key in storage_keys:
+                storage.delete(key)
+
         return True

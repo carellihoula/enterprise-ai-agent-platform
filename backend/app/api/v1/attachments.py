@@ -1,17 +1,16 @@
 """API endpoints for uploading, previewing, and deleting chat file attachments."""
 
 from datetime import datetime
-from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.entities import ChatAttachment
-from app.services.attachment_service import get_upload_dir, save_uploaded_attachment
+from app.services.attachment_service import save_uploaded_attachment
+from app.services.storage_service import get_storage_backend
 
 router = APIRouter(prefix="/attachments", tags=["Attachments"])
 
@@ -71,7 +70,7 @@ async def upload_attachment(
 def get_attachment_content(
     attachment_id: str,
     db: Annotated[Session, Depends(get_db)],
-) -> FileResponse:
+) -> Response:
     """Serves stored binary content (image or PDF) for UI preview or download.
 
     Args:
@@ -79,18 +78,22 @@ def get_attachment_content(
         db (Session): Database session dependency.
 
     Returns:
-        FileResponse: Binary file stream with appropriate MIME type.
+        Response: Binary payload with appropriate MIME type and inline disposition.
 
     Raises:
-        HTTPException: If attachment or stored file is missing.
+        HTTPException: If attachment or stored object is missing.
     """
     record = db.query(ChatAttachment).filter(ChatAttachment.id == attachment_id).first()
     if not record or not record.storage_path:
         raise HTTPException(status_code=404, detail="Attachment binary content not found.")
-    file_path = get_upload_dir() / Path(record.storage_path).name
-    if not file_path.is_file():
-        raise HTTPException(status_code=404, detail="Attachment file missing on disk.")
-    return FileResponse(path=file_path, media_type=record.mime_type, filename=record.filename)
+    raw_bytes = get_storage_backend().get_bytes(record.storage_path)
+    if raw_bytes is None:
+        raise HTTPException(status_code=404, detail="Attachment file missing in storage.")
+    return Response(
+        content=raw_bytes,
+        media_type=record.mime_type,
+        headers={"Content-Disposition": f'inline; filename="{record.filename}"'},
+    )
 
 
 @router.delete(
@@ -115,8 +118,6 @@ def delete_attachment(
     if not record:
         raise HTTPException(status_code=404, detail="Attachment not found.")
     if record.storage_path:
-        file_path = get_upload_dir() / Path(record.storage_path).name
-        if file_path.is_file():
-            file_path.unlink(missing_ok=True)
+        get_storage_backend().delete(record.storage_path)
     db.delete(record)
     db.commit()
