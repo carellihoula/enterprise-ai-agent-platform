@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 
 from app.core.database import SessionLocal, init_db
 from app.engine.mcp_client import _build_sandbox_docker_args
-from app.main import app
 from app.models.entities import McpServer
 from app.models.mcp import McpServerPayload
 
@@ -18,9 +17,9 @@ def setup_module() -> None:
     init_db()
 
 
-def test_mcp_bulk_sync_and_crud_lifecycle() -> None:
+def test_mcp_bulk_sync_and_crud_lifecycle(api_client: TestClient) -> None:
     """Validates bulk synchronization via structured servers and raw mcpServers JSON, plus CRUD endpoints."""
-    client = TestClient(app)
+    client = api_client
     db = SessionLocal()
 
     try:
@@ -116,7 +115,7 @@ def test_mcp_bulk_sync_and_crud_lifecycle() -> None:
         db.close()
 
 
-def test_mcp_sandbox_isolation_and_ssrf_protection() -> None:
+def test_mcp_sandbox_isolation_and_ssrf_protection(api_client: TestClient) -> None:
     """Validates disposable Docker sandbox args and SSRF blocking on /api/v1/mcp/test."""
     payload = McpServerPayload(
         name="github",
@@ -135,7 +134,7 @@ def test_mcp_sandbox_isolation_and_ssrf_protection() -> None:
     assert "GITHUB_TOKEN=ghp_test123" in docker_args
     assert all("DATABASE_URL" not in arg and "SECRET_KEY" not in arg for arg in docker_args)
 
-    client = TestClient(app)
+    client = api_client
     ssrf_resp = client.post(
         "/api/v1/mcp/test",
         json={

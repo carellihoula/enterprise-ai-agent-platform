@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.auth import get_auth_context
 from app.core.database import Base, get_db
 from app.main import app
 from app.models.entities import ChatAttachment
@@ -19,6 +20,7 @@ from app.services.attachment_service import (
     format_attached_file_prompt,
 )
 from app.services.storage_service import S3StorageBackend, get_storage_backend
+from tests.conftest import ensure_test_tenant_in_db
 
 
 def _create_isolated_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
@@ -39,7 +41,9 @@ def _create_isolated_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         finally:
             db.close()
 
+    ctx = ensure_test_tenant_in_db(TestingSessionLocal)
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_auth_context] = lambda: ctx
     return TestClient(app)
 
 
@@ -382,7 +386,9 @@ async def test_spreadsheet_sandbox_pandas_and_ast_guard(
         finally:
             db.close()
 
+    ctx = ensure_test_tenant_in_db(TestingSessionLocal)
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_auth_context] = lambda: ctx
     client = TestClient(app)
     try:
         csv_bytes = b"region,amount\nEMEA,1200\nAPAC,800\nEMEA,300\n"

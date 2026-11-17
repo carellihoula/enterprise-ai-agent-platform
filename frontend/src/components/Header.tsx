@@ -18,8 +18,10 @@ import {
   ShieldCheck,
   PanelLeftOpen,
   PanelLeftClose,
+  LogOut,
 } from "lucide-react";
 import { ModelConfigState } from "@/types/chat";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface HeaderProps {
   isSidebarOpen: boolean;
@@ -38,6 +40,14 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAgentBuilder,
   modelConfig,
 }) => {
+  const { user, activeWorkspace, activeRole, logout } = useAuth();
+  const initials = (user?.full_name || user?.email || "U")
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
+
   return (
     <header className="h-12 px-4 flex items-center justify-between bg-white z-20 shrink-0">
       {/* Left: Re-open Sidebar Toggle & Quick Search when sidebar is closed */}
@@ -66,24 +76,53 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </div>
 
-      {/* Right: Quick Actions & Profile */}
+      {/* Right: Workspace Context, Quick Actions & Profile */}
       <div className="flex items-center gap-2.5">
+        {activeWorkspace && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onOpenSettings}
+            title="Workspace Settings, Members & Invitations"
+            className="h-7 px-2.5 gap-1.5 border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 rounded-md text-xs font-medium shadow-none cursor-pointer"
+          >
+            <Building2 className="w-3.5 h-3.5 text-zinc-500" />
+            <span className="max-w-[140px] truncate">{activeWorkspace.name}</span>
+            {activeRole && (
+              <span className="text-[10px] text-zinc-400 capitalize">· {activeRole}</span>
+            )}
+          </Button>
+        )}
+
         {/* Global Settings */}
         <Button
           variant="ghost"
           size="icon"
           onClick={onOpenSettings}
-          title="Platform Settings & Credentials"
-          className="h-7 w-7 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-md shrink-0"
+          title="Workspace Settings & Members"
+          className="h-7 w-7 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-md shrink-0 cursor-pointer"
         >
           <Settings className="w-4 h-4" />
         </Button>
 
-        {/* User Profile Avatar */}
+        {/* User Profile Avatar & Sign Out */}
         <div className="flex items-center gap-2 pl-2 border-l border-zinc-200">
-          <div className="w-6 h-6 rounded-full bg-zinc-900 text-white flex items-center justify-center font-medium text-[11px]">
-            CH
+          <div
+            title={user?.email || "Authenticated User"}
+            className="w-6 h-6 rounded-full bg-zinc-900 text-white flex items-center justify-center font-medium text-[11px]"
+          >
+            {initials || "U"}
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={logout}
+            title="Sign Out"
+            aria-label="Sign Out"
+            className="h-7 w-7 text-zinc-500 hover:text-red-600 hover:bg-red-50 rounded-md shrink-0 cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </Button>
         </div>
       </div>
     </header>

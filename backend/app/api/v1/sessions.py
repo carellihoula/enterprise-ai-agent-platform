@@ -12,7 +12,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.v1.attachments import AttachmentResponse
+from app.core.auth import AuthContext, require_permission
 from app.core.database import get_db
+from app.core.errors import DomainError
+from app.core.permissions import Permission
+from app.models.entities import ConversationSession
 from app.services.session_service import SessionService
 
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
@@ -87,20 +91,16 @@ class SessionDetailResponse(SessionResponse):
 @router.post("", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
 async def create_session(
     request: CreateSessionRequest,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.SESSIONS_WRITE.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> SessionResponse:
-    """Endpoint to create a new conversation session.
-
-    Args:
-        request (CreateSessionRequest): Request payload containing optional title.
-        db (Session): Database session dependency.
-
-    Returns:
-        SessionResponse: Structured response of the created session.
-    """
+    """Endpoint to create a new private conversation session inside the active workspace."""
     service = SessionService(db)
-    # [Persistence] Delegate session creation to service layer
     session = service.create_session(title=request.title, agent_id=request.agent_id)
+    session.workspace_id = ctx.workspace_id
+    session.user_id = ctx.user_id
+    db.commit()
+    db.refresh(session)
     return SessionResponse(
         id=session.id,
         title=session.title,
@@ -112,19 +112,19 @@ async def create_session(
 
 @router.get("", response_model=list[SessionResponse], status_code=status.HTTP_200_OK)
 async def list_sessions(
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.SESSIONS_READ.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> list[SessionResponse]:
-    """Endpoint to list all conversation sessions ordered by recency.
-
-    Args:
-        db (Session): Database session dependency.
-
-    Returns:
-        list[SessionResponse]: List of active conversation session summaries.
-    """
-    service = SessionService(db)
-    # [Query] Fetch all session summaries sorted by updated_at descending
-    sessions = service.list_sessions()
+    """Lists the authenticated user's conversation sessions in the active workspace."""
+    sessions = (
+        db.query(ConversationSession)
+        .filter(
+            ConversationSession.workspace_id == ctx.workspace_id,
+            ConversationSession.user_id == ctx.user_id,
+        )
+        .order_by(ConversationSession.updated_at.desc())
+        .all()
+    )
     return [
         SessionResponse(
             id=s.id,
@@ -140,23 +140,14 @@ async def list_sessions(
 @router.get("/{session_id}", response_model=SessionDetailResponse, status_code=status.HTTP_200_OK)
 async def get_session(
     session_id: str,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.SESSIONS_READ.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> SessionDetailResponse:
-    """Endpoint to retrieve a detailed conversation session including message history.
-
-    Args:
-        session_id (str): UUID string identifier of the target session.
-        db (Session): Database session dependency.
-
-    Returns:
-        SessionDetailResponse: Detailed session response containing all messages.
-
-    Raises:
-        DomainError: If the session with specified ID does not exist.
-    """
+    """Retrieves a detailed conversation session owned by the authenticated user."""
     service = SessionService(db)
-    # [Query] Fetch session and populated message relationship
     session = service.get_session(session_id)
+    if session.workspace_id != ctx.workspace_id or session.user_id != ctx.user_id:
+        raise DomainError(f"Session with id '{session_id}' not found.", status_code=404)
     return SessionDetailResponse(
         id=session.id,
         title=session.title,
@@ -184,17 +175,12 @@ async def get_session(
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_session(
     session_id: str,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.SESSIONS_WRITE.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> None:
-    """Endpoint to delete a conversation session and all associated messages.
-
-    Args:
-        session_id (str): UUID string identifier of the target session.
-        db (Session): Database session dependency.
-
-    Raises:
-        DomainError: If the session with specified ID does not exist.
-    """
+    """Deletes a conversation session owned by the authenticated user."""
     service = SessionService(db)
-    # [Deletion] Cascading deletion of target session and messages
+    session = service.get_session(session_id)
+    if session.workspace_id != ctx.workspace_id or session.user_id != ctx.user_id:
+        raise DomainError(f"Session with id '{session_id}' not found.", status_code=404)
     service.delete_session(session_id)

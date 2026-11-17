@@ -5,7 +5,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.auth import AuthContext, require_permission
 from app.core.database import get_db
+from app.core.errors import DomainError
+from app.core.permissions import Permission
+from app.models.entities import AgentMemory
 from app.models.memory import MemoryCreate, MemoryResponse, MemoryType, MemoryUpdate
 from app.services.memory_service import MemoryService
 
@@ -14,39 +18,28 @@ router = APIRouter(prefix="/memories", tags=["memories"])
 
 @router.get("", response_model=list[MemoryResponse], status_code=status.HTTP_200_OK)
 def list_memories(
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.MEMORIES_READ.value))],
     db: Annotated[Session, Depends(get_db)],
     agent_id: Annotated[str | None, Query()] = None,
     memory_type: Annotated[MemoryType | None, Query()] = None,
 ) -> list[MemoryResponse]:
-    """Lists persisted long-term memories with optional agent and category filters.
-
-    Args:
-        db (Session): Database session dependency.
-        agent_id (str | None, optional): Filter memories by Agent UUID.
-        memory_type (MemoryType | None, optional): Filter by category.
-
-    Returns:
-        list[MemoryResponse]: Ordered list of persisted long-term memories.
-    """
-    service = MemoryService(db)
-    rows = service.list_memories(agent_id=agent_id, memory_type=memory_type)
+    """Lists persisted long-term memories scoped to the active workspace."""
+    query = db.query(AgentMemory).filter(AgentMemory.workspace_id == ctx.workspace_id)
+    if agent_id is not None:
+        query = query.filter(AgentMemory.agent_id == agent_id)
+    if memory_type is not None:
+        query = query.filter(AgentMemory.memory_type == memory_type)
+    rows = query.order_by(AgentMemory.importance.desc(), AgentMemory.updated_at.desc()).all()
     return [MemoryResponse.model_validate(row) for row in rows]
 
 
 @router.post("", response_model=MemoryResponse, status_code=status.HTTP_201_CREATED)
 def create_memory(
     payload: MemoryCreate,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.MEMORIES_WRITE.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> MemoryResponse:
-    """Creates a new persistent long-term memory entry manually.
-
-    Args:
-        payload (MemoryCreate): Memory creation payload.
-        db (Session): Database session dependency.
-
-    Returns:
-        MemoryResponse: Newly persisted memory entry.
-    """
+    """Creates a new persistent long-term memory entry inside the active workspace."""
     service = MemoryService(db)
     created = service.create_memory(
         content=payload.content,
@@ -56,6 +49,10 @@ def create_memory(
         tags=payload.tags,
         importance=payload.importance,
     )
+    created.workspace_id = ctx.workspace_id
+    created.user_id = ctx.user_id
+    db.commit()
+    db.refresh(created)
     return MemoryResponse.model_validate(created)
 
 
@@ -63,18 +60,17 @@ def create_memory(
 def update_memory(
     memory_id: str,
     payload: MemoryUpdate,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.MEMORIES_WRITE.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> MemoryResponse:
-    """Updates an existing long-term memory entry.
-
-    Args:
-        memory_id (str): Target memory UUID string.
-        payload (MemoryUpdate): Fields to update.
-        db (Session): Database session dependency.
-
-    Returns:
-        MemoryResponse: Updated memory entry.
-    """
+    """Updates an existing long-term memory entry within the active workspace."""
+    existing = (
+        db.query(AgentMemory)
+        .filter(AgentMemory.id == memory_id, AgentMemory.workspace_id == ctx.workspace_id)
+        .first()
+    )
+    if not existing:
+        raise DomainError(f"Memory '{memory_id}' not found", status_code=404)
     service = MemoryService(db)
     updated = service.update_memory(
         memory_id=memory_id,
@@ -89,13 +85,16 @@ def update_memory(
 @router.delete("/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_memory(
     memory_id: str,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.MEMORIES_WRITE.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> None:
-    """Deletes a long-term memory entry by UUID.
-
-    Args:
-        memory_id (str): Target memory UUID string.
-        db (Session): Database session dependency.
-    """
+    """Deletes a long-term memory entry by UUID within the active workspace."""
+    existing = (
+        db.query(AgentMemory)
+        .filter(AgentMemory.id == memory_id, AgentMemory.workspace_id == ctx.workspace_id)
+        .first()
+    )
+    if not existing:
+        raise DomainError(f"Memory '{memory_id}' not found", status_code=404)
     service = MemoryService(db)
     service.delete_memory(memory_id)

@@ -8,6 +8,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+import app.models.auth  # noqa: F401 - register auth/workspace models with metadata
 import app.models.entities  # noqa: F401 - import models to register with metadata
 from app.core.config import get_settings
 from app.core.database import Base

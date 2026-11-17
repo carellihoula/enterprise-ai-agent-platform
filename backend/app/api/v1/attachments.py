@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from app.core.auth import AuthContext, require_permission
 from app.core.database import get_db
+from app.core.permissions import Permission
 from app.models.entities import ChatAttachment
 from app.services.attachment_service import save_uploaded_attachment
 from app.services.storage_service import get_storage_backend
@@ -38,20 +40,12 @@ class AttachmentResponse(BaseModel):
     summary="Upload a chat file or image attachment",
 )
 async def upload_attachment(
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.ATTACHMENTS_WRITE.value))],
     db: Annotated[Session, Depends(get_db)],
     file: Annotated[UploadFile, File(...)],
     session_id: Annotated[str | None, Form()] = None,
 ) -> AttachmentResponse:
-    """Validates, extracts text (if applicable), and stores an uploaded chat attachment.
-
-    Args:
-        db (Session): Database session dependency.
-        file (UploadFile): Multipart uploaded file.
-        session_id (str | None, optional): Optional ConversationSession UUID.
-
-    Returns:
-        AttachmentResponse: Persisted attachment metadata.
-    """
+    """Validates, extracts text (if applicable), and stores a user-scoped chat attachment."""
     raw_bytes = await file.read()
     record = save_uploaded_attachment(
         db=db,
@@ -59,6 +53,8 @@ async def upload_attachment(
         content_type=file.content_type,
         raw_bytes=raw_bytes,
         session_id=session_id,
+        workspace_id=ctx.workspace_id,
+        user_id=ctx.user_id,
     )
     return AttachmentResponse.model_validate(record)
 
@@ -69,21 +65,19 @@ async def upload_attachment(
 )
 def get_attachment_content(
     attachment_id: str,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.ATTACHMENTS_READ.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> Response:
-    """Serves stored binary content (image or PDF) for UI preview or download.
-
-    Args:
-        attachment_id (str): Target attachment UUID.
-        db (Session): Database session dependency.
-
-    Returns:
-        Response: Binary payload with appropriate MIME type and inline disposition.
-
-    Raises:
-        HTTPException: If attachment or stored object is missing.
-    """
-    record = db.query(ChatAttachment).filter(ChatAttachment.id == attachment_id).first()
+    """Serves stored binary content owned by the authenticated user in the active workspace."""
+    record = (
+        db.query(ChatAttachment)
+        .filter(
+            ChatAttachment.id == attachment_id,
+            ChatAttachment.workspace_id == ctx.workspace_id,
+            ChatAttachment.user_id == ctx.user_id,
+        )
+        .first()
+    )
     if not record or not record.storage_path:
         raise HTTPException(status_code=404, detail="Attachment binary content not found.")
     raw_bytes = get_storage_backend().get_bytes(record.storage_path)
@@ -103,18 +97,19 @@ def get_attachment_content(
 )
 def delete_attachment(
     attachment_id: str,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.ATTACHMENTS_WRITE.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> None:
-    """Deletes an attachment record and removes any associated binary file on disk.
-
-    Args:
-        attachment_id (str): Target attachment UUID.
-        db (Session): Database session dependency.
-
-    Raises:
-        HTTPException: If no attachment exists with `attachment_id`.
-    """
-    record = db.query(ChatAttachment).filter(ChatAttachment.id == attachment_id).first()
+    """Deletes an attachment record owned by the authenticated user and its stored object."""
+    record = (
+        db.query(ChatAttachment)
+        .filter(
+            ChatAttachment.id == attachment_id,
+            ChatAttachment.workspace_id == ctx.workspace_id,
+            ChatAttachment.user_id == ctx.user_id,
+        )
+        .first()
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Attachment not found.")
     if record.storage_path:

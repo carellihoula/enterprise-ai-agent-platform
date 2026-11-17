@@ -7,7 +7,6 @@ dynamic model and knowledge configuration, and database persistence.
 from fastapi.testclient import TestClient
 
 from app.core.database import SessionLocal, init_db
-from app.main import app
 from app.models.entities import Agent
 
 
@@ -16,9 +15,9 @@ def setup_module() -> None:
     init_db()
 
 
-def test_agents_crud_lifecycle() -> None:
+def test_agents_crud_lifecycle(api_client: TestClient) -> None:
     """Validates complete create, read, update, and delete operations for Agents."""
-    client = TestClient(app)
+    client = api_client
     db = SessionLocal()
 
     try:

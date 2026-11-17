@@ -15,9 +15,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.audit import record_audit_event
+from app.core.auth import AuthContext, get_auth_context, require_permission
 from app.core.config import get_settings
 from app.core.database import SessionLocal, get_db
 from app.core.errors import DomainError
+from app.core.permissions import Permission
 from app.core.security import decrypt_api_key
 from app.engine.langchain_tools import (
     build_builtin_structured_tool,
@@ -173,7 +176,9 @@ class ProviderModelsResponse(BaseModel):
 
 
 @router.get("/models", response_model=list[ProviderModelsResponse], status_code=status.HTTP_200_OK)
-async def list_available_models() -> list[ProviderModelsResponse]:
+async def list_available_models(
+    _ctx: Annotated[AuthContext, Depends(get_auth_context)],
+) -> list[ProviderModelsResponse]:
     """Endpoint listing all supported providers with empty model catalogs.
 
     Returns:
@@ -204,6 +209,8 @@ def _prepare_messages_context(
     tools: list[Any] | None = None,
     max_output_tokens: int | None = None,
     agent_id: str | None = None,
+    workspace_id: str | None = None,
+    user_id: str | None = None,
 ) -> tuple[list[ChatMessage], str | None, int]:
     """Prepares conversation history using the sentinel, long-term memory, working state, and summary.
 
@@ -253,8 +260,12 @@ def _prepare_messages_context(
         return base_msgs, None, history_budget
 
     service = SessionService(db)
-    # [Validation] Fetch session to confirm existence and obtain historical messages
+    # [Validation] Fetch session and enforce workspace + user ownership
     session = service.get_session(session_id)
+    if (workspace_id and session.workspace_id != workspace_id) or (
+        user_id and session.user_id != user_id
+    ):
+        raise DomainError(f"Session with id '{session_id}' not found.", status_code=404)
 
     historical_messages = [
         ChatMessage(role=MessageRole(m.role), content=m.content) for m in session.messages
@@ -380,6 +391,8 @@ def _attach_files_to_last_user_message(
     attachment_ids: list[str],
     full_messages: list[ChatMessage],
     dlp_active: bool = False,
+    workspace_id: str | None = None,
+    user_id: str | None = None,
 ) -> None:
     """Enriches the latest user ChatMessage with text files, images, and PDFs.
 
@@ -398,7 +411,12 @@ def _attach_files_to_last_user_message(
             status_code=400,
         )
 
-    rows = db.query(ChatAttachment).filter(ChatAttachment.id.in_(attachment_ids)).all()
+    att_query = db.query(ChatAttachment).filter(ChatAttachment.id.in_(attachment_ids))
+    if workspace_id:
+        att_query = att_query.filter(ChatAttachment.workspace_id == workspace_id)
+    if user_id:
+        att_query = att_query.filter(ChatAttachment.user_id == user_id)
+    rows = att_query.all()
     by_id = {row.id: row for row in rows}
     ordered = [by_id[aid] for aid in attachment_ids if aid in by_id]
     if not ordered:
@@ -547,16 +565,9 @@ async def _persist_chat_turn(
 def _resolve_provider_credentials(
     request: ChatRequest,
     db: Session,
+    workspace_id: str | None = None,
 ) -> tuple[str | None, str | None, str | None]:
-    """Resolves API key, base URL, and system instruction from request or persisted database config.
-
-    Args:
-        request (ChatRequest): Incoming chat request payload.
-        db (Session): Active database session.
-
-    Returns:
-        tuple[str | None, str | None, str | None]: Tuple of (api_key, base_url, system_instruction).
-    """
+    """Resolves API key, base URL, and system instruction from request or persisted database config."""
     api_key = request.api_key
     base_url = request.base_url
     system_instruction = request.system_instruction
@@ -564,7 +575,10 @@ def _resolve_provider_credentials(
     # [Agent Override] If agent_id (or legacy assistant_id) provided, adopt agent's persona and model configuration
     target_agent_id = request.agent_id or request.assistant_id
     if target_agent_id:
-        agent = db.query(Agent).filter(Agent.id == target_agent_id).first()
+        agent_q = db.query(Agent).filter(Agent.id == target_agent_id)
+        if workspace_id:
+            agent_q = agent_q.filter(Agent.workspace_id == workspace_id)
+        agent = agent_q.first()
         if agent:
             if not system_instruction and agent.instructions:
                 system_instruction = agent.instructions
@@ -577,12 +591,11 @@ def _resolve_provider_credentials(
             if not base_url and agent.base_url:
                 base_url = agent.base_url
     elif request.provider_name:
-        # [Fallback to Provider Match] Check if an agent matches the requested provider
-        matched_agent = (
-            db.query(Agent)
-            .filter(Agent.provider_id == request.provider_name.lower().strip())
-            .first()
-        )
+        # [Fallback to Provider Match] Check if an agent in this workspace matches the requested provider
+        match_q = db.query(Agent).filter(Agent.provider_id == request.provider_name.lower().strip())
+        if workspace_id:
+            match_q = match_q.filter(Agent.workspace_id == workspace_id)
+        matched_agent = match_q.first()
         if matched_agent:
             if not api_key and matched_agent.api_key_encrypted:
                 api_key = decrypt_api_key(matched_agent.api_key_encrypted)
@@ -594,25 +607,23 @@ def _resolve_provider_credentials(
     return api_key, base_url, system_instruction
 
 
-def _resolve_target_agent(request: ChatRequest, db: Session) -> Agent | None:
-    """Resolves the target Agent ORM entity for a chat request if specified.
-
-    Args:
-        request (ChatRequest): Incoming chat request payload.
-        db (Session): Active database session.
-
-    Returns:
-        Agent | None: Matched Agent ORM record, or None.
-    """
+def _resolve_target_agent(
+    request: ChatRequest,
+    db: Session,
+    workspace_id: str | None = None,
+) -> Agent | None:
+    """Resolves the target Agent ORM entity for a chat request within the active workspace."""
     target_agent_id = request.agent_id or request.assistant_id
     if target_agent_id:
-        return db.query(Agent).filter(Agent.id == target_agent_id).first()
+        q = db.query(Agent).filter(Agent.id == target_agent_id)
+        if workspace_id:
+            q = q.filter(Agent.workspace_id == workspace_id)
+        return q.first()
     if request.provider_name:
-        return (
-            db.query(Agent)
-            .filter(Agent.provider_id == request.provider_name.lower().strip())
-            .first()
-        )
+        q = db.query(Agent).filter(Agent.provider_id == request.provider_name.lower().strip())
+        if workspace_id:
+            q = q.filter(Agent.workspace_id == workspace_id)
+        return q.first()
     return None
 
 
@@ -688,19 +699,10 @@ class ApprovalDecisionRequest(BaseModel):
 async def resolve_tool_approval(
     approval_id: str,
     payload: ApprovalDecisionRequest,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.CHAT_RUN.value))],
+    db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, str]:
-    """Resolves a pending Human-in-the-Loop tool approval request.
-
-    Args:
-        approval_id (str): Unique approval identifier emitted via SSE `approval_required`.
-        payload (ApprovalDecisionRequest): Operator decision (`approve` or `reject`).
-
-    Returns:
-        dict[str, str]: Confirmation dictionary with resolved `approval_id` and `decision`.
-
-    Raises:
-        DomainError: If the approval request does not exist or has already expired.
-    """
+    """Resolves a pending Human-in-the-Loop tool approval request."""
     resolved = approval_manager.resolve(approval_id, payload.decision)
     if not resolved:
         raise DomainError(
@@ -708,31 +710,29 @@ async def resolve_tool_approval(
             error_code="APPROVAL_NOT_FOUND",
             status_code=404,
         )
+    record_audit_event(
+        db=db,
+        action=f"hitl.{payload.decision}",
+        workspace_id=ctx.workspace_id,
+        actor_user_id=ctx.user_id,
+        resource_type="tool_approval",
+        resource_id=approval_id,
+        commit=True,
+    )
     return {"approval_id": approval_id, "decision": payload.decision}
 
 
 @router.post("", response_model=ChatResponse, status_code=status.HTTP_200_OK)
 async def generate_chat(
     request: ChatRequest,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.CHAT_RUN.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> ChatResponse:
-    """Synchronous chat endpoint generating a complete response.
-
-    Args:
-        request (ChatRequest): Incoming chat request payload.
-        db (Session): Database session dependency.
-
-    Returns:
-        ChatResponse: Structured chat completion response.
-
-    Raises:
-        ProviderError: If the model provider endpoint fails.
-        DomainError: If the specified session_id is not found.
-    """
+    """Synchronous chat endpoint generating a complete response."""
     resolved_api_key, resolved_base_url, resolved_system_prompt = _resolve_provider_credentials(
-        request, db
+        request, db, workspace_id=ctx.workspace_id
     )
-    target_agent = _resolve_target_agent(request, db)
+    target_agent = _resolve_target_agent(request, db, workspace_id=ctx.workspace_id)
     resolved_enable_reasoning = (
         request.enable_reasoning
         if request.enable_reasoning is not None
@@ -768,12 +768,16 @@ async def generate_chat(
         tools=agent_tools,
         max_output_tokens=request.max_tokens,
         agent_id=target_agent.id if target_agent else None,
+        workspace_id=ctx.workspace_id,
+        user_id=ctx.user_id,
     )
     _attach_files_to_last_user_message(
         db,
         request.attachment_ids,
         full_messages,
         dlp_active=agent_policy.dlp_filter_active,
+        workspace_id=ctx.workspace_id,
+        user_id=ctx.user_id,
     )
 
     if agent_tools and isinstance(provider, LangChainModelProvider):
@@ -856,21 +860,14 @@ async def generate_chat(
 @router.post("/stream", status_code=status.HTTP_200_OK)
 async def stream_chat(
     request: ChatRequest,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.CHAT_RUN.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> StreamingResponse:
-    """Streaming chat endpoint serving real-time Server-Sent Events (SSE).
-
-    Args:
-        request (ChatRequest): Incoming chat request payload.
-        db (Session): Database session dependency.
-
-    Returns:
-        StreamingResponse: SSE stream formatted with text/event-stream MIME type.
-    """
+    """Streaming chat endpoint serving real-time Server-Sent Events (SSE)."""
     resolved_api_key, resolved_base_url, resolved_system_prompt = _resolve_provider_credentials(
-        request, db
+        request, db, workspace_id=ctx.workspace_id
     )
-    target_agent = _resolve_target_agent(request, db)
+    target_agent = _resolve_target_agent(request, db, workspace_id=ctx.workspace_id)
     resolved_enable_reasoning = (
         request.enable_reasoning
         if request.enable_reasoning is not None
@@ -906,12 +903,16 @@ async def stream_chat(
         tools=agent_tools,
         max_output_tokens=request.max_tokens,
         agent_id=target_agent.id if target_agent else None,
+        workspace_id=ctx.workspace_id,
+        user_id=ctx.user_id,
     )
     _attach_files_to_last_user_message(
         db,
         request.attachment_ids,
         full_messages,
         dlp_active=agent_policy.dlp_filter_active,
+        workspace_id=ctx.workspace_id,
+        user_id=ctx.user_id,
     )
 
     async def event_generator() -> AsyncGenerator[str, None]:

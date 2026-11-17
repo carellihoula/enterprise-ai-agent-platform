@@ -7,7 +7,7 @@ profiles (development, staging, production, testing), and secret management.
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import yaml
 from pydantic import Field, SecretStr
@@ -111,6 +111,58 @@ class Settings(BaseSettings):
     s3_use_ssl: bool = Field(
         default=False,
         description="Whether to use TLS/SSL when connecting to the S3 endpoint",
+    )
+    auth_mode: Literal["local", "oidc", "hybrid"] = Field(
+        default="local",
+        description="Authentication mode ('local' email/password, 'oidc' SSO only, or 'hybrid')",
+    )
+    allow_public_signup: bool = Field(
+        default=True,
+        description="Allow self-service registration after initial admin bootstrap",
+    )
+    jwt_algorithm: str = Field(
+        default="HS256",
+        description="Signing algorithm for JWT access tokens",
+    )
+    access_token_expire_minutes: int = Field(
+        default=15,
+        description="Lifetime of short-lived JWT access tokens in minutes",
+    )
+    refresh_token_expire_days: int = Field(
+        default=14,
+        description="Lifetime of rotating refresh tokens in days",
+    )
+    cookie_secure: bool = Field(
+        default=False,
+        description="Set Secure flag on HttpOnly auth cookies (enable in HTTPS production)",
+    )
+    redis_host: str = Field(
+        default="localhost",
+        description="Redis host for auth caching and rate limiting",
+    )
+    redis_port: int = Field(
+        default=6379,
+        description="Redis TCP port",
+    )
+    redis_url: SecretStr | None = Field(
+        default=None,
+        description="Optional full Redis connection URL overriding host and port",
+    )
+    oidc_issuer_url: str | None = Field(
+        default=None,
+        description="Optional OIDC discovery issuer URL for enterprise SSO",
+    )
+    oidc_client_id: str | None = Field(
+        default=None,
+        description="Optional OIDC client ID",
+    )
+    oidc_client_secret: SecretStr | None = Field(
+        default=None,
+        description="Optional OIDC client secret",
+    )
+    oidc_redirect_uri: str | None = Field(
+        default=None,
+        description="Optional OIDC callback redirect URI",
     )
     config_file_path: Path | None = Field(
         default=None,

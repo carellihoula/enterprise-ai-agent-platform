@@ -4,11 +4,13 @@ This module exposes FastAPI routes for listing registered builtin tools and
 executing interactive test runs against them.
 """
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 
+from app.core.auth import AuthContext, require_permission
+from app.core.permissions import Permission
 from app.engine.builtin_tools import execute_builtin_tool, list_builtin_tools
 
 router = APIRouter(prefix="/tools", tags=["Tools"])
@@ -65,12 +67,10 @@ class BuiltinToolExecuteResponse(BaseModel):
     response_model=list[BuiltinToolSchemaResponse],
     status_code=status.HTTP_200_OK,
 )
-def get_builtin_tools() -> list[BuiltinToolSchemaResponse]:
-    """Lists all available native builtin tools and their JSON parameter schemas.
-
-    Returns:
-        list[BuiltinToolSchemaResponse]: Array of registered builtin tool descriptors.
-    """
+def get_builtin_tools(
+    _ctx: Annotated[AuthContext, Depends(require_permission(Permission.TOOLS_READ.value))],
+) -> list[BuiltinToolSchemaResponse]:
+    """Lists all available native builtin tools and their JSON parameter schemas."""
     return [BuiltinToolSchemaResponse(**item) for item in list_builtin_tools()]
 
 
@@ -81,14 +81,8 @@ def get_builtin_tools() -> list[BuiltinToolSchemaResponse]:
 )
 async def run_builtin_tool_test(
     payload: BuiltinToolExecuteRequest,
+    _ctx: Annotated[AuthContext, Depends(require_permission(Permission.TOOLS_EXECUTE.value))],
 ) -> BuiltinToolExecuteResponse:
-    """Executes a native builtin tool with the provided arguments for live testing.
-
-    Args:
-        payload (BuiltinToolExecuteRequest): Target tool name and JSON arguments.
-
-    Returns:
-        BuiltinToolExecuteResponse: Structured execution result and timing.
-    """
+    """Executes a native builtin tool with the provided arguments for live testing."""
     outcome = await execute_builtin_tool(payload.name, payload.arguments)
     return BuiltinToolExecuteResponse(**outcome)

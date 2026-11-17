@@ -329,6 +329,8 @@ def save_uploaded_attachment(
     content_type: str | None,
     raw_bytes: bytes,
     session_id: str | None = None,
+    workspace_id: str | None = None,
+    user_id: str | None = None,
 ) -> ChatAttachment:
     """Validates, extracts, stores, and persists an uploaded chat attachment.
 
@@ -362,10 +364,16 @@ def save_uploaded_attachment(
     is_image = ext in IMAGE_MIME_BY_EXT
     is_pdf = ext == ".pdf"
 
+    key_prefix = (
+        f"workspaces/{workspace_id}/users/{user_id}/attachments"
+        if workspace_id and user_id
+        else "attachments"
+    )
+
     if is_image:
         mime_type = IMAGE_MIME_BY_EXT[ext]
         extracted_text: str | None = None
-        storage_key = f"attachments/{uuid.uuid4().hex}{ext}"
+        storage_key = f"{key_prefix}/{uuid.uuid4().hex}{ext}"
         storage_path: str | None = get_storage_backend().put_bytes(
             storage_key, raw_bytes, mime_type
         )
@@ -377,28 +385,28 @@ def save_uploaded_attachment(
                 "[No selectable text could be extracted from this PDF; it may be a scanned "
                 "document requiring a multimodal PDF-capable model.]"
             )
-        storage_key = f"attachments/{uuid.uuid4().hex}.pdf"
+        storage_key = f"{key_prefix}/{uuid.uuid4().hex}.pdf"
         storage_path = get_storage_backend().put_bytes(storage_key, raw_bytes, mime_type)
     elif ext == ".docx":
         mime_type = DOCX_MIME
         extracted_text = extract_docx_text(raw_bytes)
-        storage_key = f"attachments/{uuid.uuid4().hex}.docx"
+        storage_key = f"{key_prefix}/{uuid.uuid4().hex}.docx"
         storage_path = get_storage_backend().put_bytes(storage_key, raw_bytes, mime_type)
     elif ext == ".xlsx":
         mime_type = XLSX_MIME
         extracted_text = extract_xlsx_preview(raw_bytes)
-        storage_key = f"attachments/{uuid.uuid4().hex}.xlsx"
+        storage_key = f"{key_prefix}/{uuid.uuid4().hex}.xlsx"
         storage_path = get_storage_backend().put_bytes(storage_key, raw_bytes, mime_type)
     elif ext == ".csv":
         mime_type = "text/csv"
         extracted_text = extract_csv_preview(raw_bytes)
-        storage_key = f"attachments/{uuid.uuid4().hex}.csv"
+        storage_key = f"{key_prefix}/{uuid.uuid4().hex}.csv"
         storage_path = get_storage_backend().put_bytes(storage_key, raw_bytes, mime_type)
     elif ext in TEXT_CODE_EXTENSIONS or (content_type and content_type.startswith("text/")):
         mime_type = content_type or "text/plain"
         extracted_text = decode_text_attachment(raw_bytes)
         storage_ext = ext or ".txt"
-        storage_key = f"attachments/{uuid.uuid4().hex}{storage_ext}"
+        storage_key = f"{key_prefix}/{uuid.uuid4().hex}{storage_ext}"
         storage_path = get_storage_backend().put_bytes(storage_key, raw_bytes, mime_type)
     else:
         raise DomainError(
@@ -408,6 +416,8 @@ def save_uploaded_attachment(
         )
 
     record = ChatAttachment(
+        workspace_id=workspace_id,
+        user_id=user_id,
         session_id=session_id,
         filename=safe_name,
         mime_type=mime_type,

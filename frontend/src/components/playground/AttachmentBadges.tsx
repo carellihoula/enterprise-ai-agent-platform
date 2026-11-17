@@ -1,7 +1,37 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { FileCode, FileText, Image as ImageIcon, Loader2, X } from "lucide-react";
 import { ChatAttachment } from "@/types/chat";
-import { getAttachmentContentUrl } from "@/lib/api";
+import { apiFetch, getAttachmentContentUrl } from "@/lib/api";
+
+const AuthenticatedThumbnail: React.FC<{ attachmentId: string; alt: string; className: string }> = ({
+  attachmentId,
+  alt,
+  className,
+}) => {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | null = null;
+    apiFetch(getAttachmentContentUrl(attachmentId))
+      .then((res) => (res.ok ? res.blob() : null))
+      .then((blob) => {
+        if (!active || !blob) return;
+        objectUrl = URL.createObjectURL(blob);
+        setBlobUrl(objectUrl);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachmentId]);
+
+  if (!blobUrl) {
+    return <ImageIcon className="w-4 h-4 text-blue-600 shrink-0" />;
+  }
+  return <img src={blobUrl} alt={alt} className={className} />;
+};
 
 interface AttachmentBadgesProps {
   attachments: ChatAttachment[];
@@ -35,8 +65,8 @@ export const AttachmentBadges: React.FC<AttachmentBadgesProps> = ({
           className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs text-zinc-800 max-w-[240px]"
         >
           {att.is_image ? (
-            <img
-              src={getAttachmentContentUrl(att.id)}
+            <AuthenticatedThumbnail
+              attachmentId={att.id}
               alt={att.filename}
               className={
                 compact

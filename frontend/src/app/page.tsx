@@ -20,6 +20,9 @@ import { useAgents } from "@/hooks/useAgents";
 import { AssistantsListView as AgentsListView, AssistantPickerModal as AgentPickerModal } from "@/components/assistants";
 import { McpConfigView } from "@/components/mcp";
 import { BuiltinToolsView } from "@/components/tools";
+import { LoginView } from "@/components/auth/LoginView";
+import { WorkspaceSettingsView } from "@/components/workspace";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   EngineSubBar,
   ChatPlaygroundView,
@@ -27,6 +30,24 @@ import {
 } from "@/components/playground";
 
 export default function EnterpriseAppPage() {
+  const { user, activeWorkspaceId, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-zinc-50 text-xs text-zinc-500">
+        Loading workspace...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginView />;
+  }
+
+  return <AuthenticatedAppShell key={activeWorkspaceId ?? "default"} />;
+}
+
+function AuthenticatedAppShell() {
   const [activeTab, setActiveTab] = useState<NavTabId>("home");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -151,7 +172,7 @@ export default function EnterpriseAppPage() {
           onNewSession={() => handleNewSession("New Conversation", activeAgent?.id)}
           onDeleteSession={handleDeleteSession}
           isLoadingSessions={isLoadingSessions}
-          onOpenSettings={handleOpenConfigForNew}
+          onOpenSettings={() => setActiveTab("settings")}
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         />
@@ -162,7 +183,7 @@ export default function EnterpriseAppPage() {
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-          onOpenSettings={handleOpenConfigForNew}
+          onOpenSettings={() => setActiveTab("settings")}
           onOpenAgentBuilder={() => setActiveTab("agents")}
           modelConfig={modelConfig}
         />
@@ -252,12 +273,20 @@ export default function EnterpriseAppPage() {
           </div>
         )}
 
-        {/* 6. Placeholder Views for Other Modules */}
+        {/* 6. Workspace Settings, Members, API Keys & Audit Logs */}
+        {activeTab === "settings" && (
+          <div className="flex-1 overflow-y-auto h-full">
+            <WorkspaceSettingsView />
+          </div>
+        )}
+
+        {/* 7. Placeholder Views for Other Modules */}
         {activeTab !== "home" &&
           activeTab !== "chat" &&
           activeTab !== "agents" &&
           activeTab !== "mcp" &&
-          activeTab !== "tools" && (
+          activeTab !== "tools" &&
+          activeTab !== "settings" && (
             <ModulePlaceholderView
               activeTab={activeTab}
               onNavigateHome={() => setActiveTab("home")}

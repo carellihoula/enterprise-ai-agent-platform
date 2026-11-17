@@ -11,6 +11,15 @@ from app.models.agent import (
     ModelSpec,
     ToolSpec,
 )
+from app.models.auth import (
+    ApiKey,
+    AuditLog,
+    RefreshToken,
+    User,
+    Workspace,
+    WorkspaceInvitation,
+    WorkspaceMember,
+)
 from app.models.entities import Agent, ConversationSession, SessionMessage
 
 __all__ = [
@@ -18,9 +27,16 @@ __all__ = [
     "AgentCreate",
     "AgentResponse",
     "AgentUpdate",
+    "ApiKey",
+    "AuditLog",
     "ConversationSession",
     "KnowledgeSource",
     "ModelSpec",
+    "RefreshToken",
     "SessionMessage",
     "ToolSpec",
+    "User",
+    "Workspace",
+    "WorkspaceInvitation",
+    "WorkspaceMember",
 ]

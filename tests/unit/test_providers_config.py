@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 
 from app.core.database import SessionLocal, init_db
 from app.core.security import decrypt_api_key, encrypt_api_key, mask_api_key
-from app.main import app
 from app.models.entities import Agent
 
 
@@ -34,10 +33,10 @@ def test_mask_api_key_formats() -> None:
     assert masked.endswith("9999")
 
 
-def test_agent_credentials_encryption() -> None:
+def test_agent_credentials_encryption(api_client: TestClient) -> None:
     """Validates saving agent configuration with encrypted credentials and masked keys."""
     init_db()
-    client = TestClient(app)
+    client = api_client
     db = SessionLocal()
     agent_id = None
     try:

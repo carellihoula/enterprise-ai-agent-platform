@@ -15,12 +15,104 @@ import {
   AssistantUpdatePayload,
 } from '@/types/agent';
 import { McpConfigResponseDto, McpServerDto, McpTestResponseDto } from '@/types/mcp';
+import {
+  ApiKeyCreatedDto,
+  ApiKeyDto,
+  AuditLogDto,
+  AuthMeResponse,
+  AuthTokenResponse,
+  BootstrapStatusResponse,
+  InvitationDto,
+  WorkspaceMemberDto,
+  WorkspaceSummary,
+} from '@/types/auth';
 import { cleanSerializedContentBlocks } from '@/lib/utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
+let _accessToken: string | null = null;
+let _activeWorkspaceId: string | null = null;
+let _onUnauthorized: (() => void) | null = null;
+let _refreshPromise: Promise<string | null> | null = null;
+
+export function setAuthSession(accessToken: string | null, workspaceId: string | null): void {
+  _accessToken = accessToken;
+  _activeWorkspaceId = workspaceId;
+}
+
+export function clearAuthSession(): void {
+  _accessToken = null;
+  _activeWorkspaceId = null;
+}
+
+export function setOnUnauthorizedCallback(cb: (() => void) | null): void {
+  _onUnauthorized = cb;
+}
+
+async function _attemptTokenRefresh(): Promise<string | null> {
+  if (_refreshPromise) {
+    return _refreshPromise;
+  }
+  _refreshPromise = (async () => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        return null;
+      }
+      const data: AuthTokenResponse = await res.json();
+      _accessToken = data.access_token;
+      if (!_activeWorkspaceId) {
+        _activeWorkspaceId = data.active_workspace_id;
+      }
+      return data.access_token;
+    } catch {
+      return null;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+  return _refreshPromise;
+}
+
+export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const buildHeaders = (token: string | null): Headers => {
+    const headers = new Headers(init.headers);
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+    if (_activeWorkspaceId) {
+      headers.set('X-Workspace-Id', _activeWorkspaceId);
+    }
+    return headers;
+  };
+
+  let res = await fetch(input, {
+    ...init,
+    credentials: 'include',
+    headers: buildHeaders(_accessToken),
+  });
+
+  if (res.status === 401 && !input.includes('/auth/login') && !input.includes('/auth/register')) {
+    const newToken = await _attemptTokenRefresh();
+    if (newToken) {
+      res = await fetch(input, {
+        ...init,
+        credentials: 'include',
+        headers: buildHeaders(newToken),
+      });
+    } else {
+      clearAuthSession();
+      _onUnauthorized?.();
+    }
+  }
+  return res;
+}
+
 export async function fetchSessions(): Promise<Session[]> {
-  const res = await fetch(`${API_BASE_URL}/sessions`, { cache: 'no-store' });
+  const res = await apiFetch(`${API_BASE_URL}/sessions`, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch sessions (${res.status})`);
   }
@@ -28,7 +120,7 @@ export async function fetchSessions(): Promise<Session[]> {
 }
 
 export async function createSession(title?: string, agentId?: string): Promise<Session> {
-  const res = await fetch(`${API_BASE_URL}/sessions`, {
+  const res = await apiFetch(`${API_BASE_URL}/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, agent_id: agentId }),
@@ -40,7 +132,7 @@ export async function createSession(title?: string, agentId?: string): Promise<S
 }
 
 export async function fetchSessionDetails(sessionId: string): Promise<Session> {
-  const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, { cache: 'no-store' });
+  const res = await apiFetch(`${API_BASE_URL}/sessions/${sessionId}`, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch session details (${res.status})`);
   }
@@ -48,7 +140,7 @@ export async function fetchSessionDetails(sessionId: string): Promise<Session> {
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
+  const res = await apiFetch(`${API_BASE_URL}/sessions/${sessionId}`, {
     method: 'DELETE',
   });
   if (!res.ok) {
@@ -111,7 +203,7 @@ export async function streamChatCompletion({
   onError,
 }: StreamChatParams): Promise<void> {
   try {
-    const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+    const response = await apiFetch(`${API_BASE_URL}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: abortSignal,
@@ -195,7 +287,7 @@ export async function streamChatCompletion({
 }
 
 export async function fetchAgents(): Promise<Agent[]> {
-  const res = await fetch(`${API_BASE_URL}/agents`, { cache: 'no-store' });
+  const res = await apiFetch(`${API_BASE_URL}/agents`, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch agents (${res.status})`);
   }
@@ -203,7 +295,7 @@ export async function fetchAgents(): Promise<Agent[]> {
 }
 
 export async function fetchAgent(id: string): Promise<Agent> {
-  const res = await fetch(`${API_BASE_URL}/agents/${id}`, { cache: 'no-store' });
+  const res = await apiFetch(`${API_BASE_URL}/agents/${id}`, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch agent ${id} (${res.status})`);
   }
@@ -211,7 +303,7 @@ export async function fetchAgent(id: string): Promise<Agent> {
 }
 
 export async function createAgentApi(payload: AgentCreatePayload): Promise<Agent> {
-  const res = await fetch(`${API_BASE_URL}/agents`, {
+  const res = await apiFetch(`${API_BASE_URL}/agents`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -226,7 +318,7 @@ export async function updateAgentApi(
   id: string,
   payload: AgentUpdatePayload
 ): Promise<Agent> {
-  const res = await fetch(`${API_BASE_URL}/agents/${id}`, {
+  const res = await apiFetch(`${API_BASE_URL}/agents/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -238,7 +330,7 @@ export async function updateAgentApi(
 }
 
 export async function deleteAgentApi(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/agents/${id}`, {
+  const res = await apiFetch(`${API_BASE_URL}/agents/${id}`, {
     method: 'DELETE',
   });
   if (!res.ok) {
@@ -264,7 +356,7 @@ export const deleteAssistantApi = deleteAgentApi;
  */
 export async function fetchMcpConfig(agentId?: string): Promise<McpConfigResponseDto> {
   const query = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : '';
-  const res = await fetch(`${API_BASE_URL}/mcp${query}`, { cache: 'no-store' });
+  const res = await apiFetch(`${API_BASE_URL}/mcp${query}`, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch MCP configuration (${res.status})`);
   }
@@ -286,7 +378,7 @@ export async function syncMcpConfig(
   agentId?: string
 ): Promise<McpConfigResponseDto> {
   const query = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : '';
-  const res = await fetch(`${API_BASE_URL}/mcp${query}`, {
+  const res = await apiFetch(`${API_BASE_URL}/mcp${query}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ servers }),
@@ -308,7 +400,7 @@ export async function syncMcpConfig(
  *   Promise<McpTestResponseDto>: Live handshake status, discovered tools count, and diagnostics.
  */
 export async function testMcpServer(server: McpServerDto): Promise<McpTestResponseDto> {
-  const res = await fetch(`${API_BASE_URL}/mcp/test`, {
+  const res = await apiFetch(`${API_BASE_URL}/mcp/test`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(server),
@@ -336,7 +428,7 @@ export interface BuiltinToolExecuteResult {
 }
 
 export async function fetchBuiltinTools(): Promise<BuiltinToolDescriptor[]> {
-  const res = await fetch(`${API_BASE_URL}/tools/builtin`, {
+  const res = await apiFetch(`${API_BASE_URL}/tools/builtin`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -351,7 +443,7 @@ export async function testBuiltinTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<BuiltinToolExecuteResult> {
-  const res = await fetch(`${API_BASE_URL}/tools/builtin/test`, {
+  const res = await apiFetch(`${API_BASE_URL}/tools/builtin/test`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, arguments: args }),
@@ -367,7 +459,7 @@ export async function resolveToolApproval(
   approvalId: string,
   decision: 'approve' | 'reject',
 ): Promise<{ approval_id: string; decision: 'approve' | 'reject' }> {
-  const res = await fetch(`${API_BASE_URL}/chat/approvals/${approvalId}`, {
+  const res = await apiFetch(`${API_BASE_URL}/chat/approvals/${approvalId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ decision }),
@@ -392,7 +484,7 @@ export async function uploadChatAttachment(
   if (sessionId) {
     formData.append('session_id', sessionId);
   }
-  const res = await fetch(`${API_BASE_URL}/attachments`, {
+  const res = await apiFetch(`${API_BASE_URL}/attachments`, {
     method: 'POST',
     body: formData,
   });
@@ -411,10 +503,196 @@ export async function uploadChatAttachment(
 }
 
 export async function deleteChatAttachment(attachmentId: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/attachments/${attachmentId}`, {
+  const res = await apiFetch(`${API_BASE_URL}/attachments/${attachmentId}`, {
     method: 'DELETE',
   });
   if (!res.ok && res.status !== 404) {
     throw new Error(`Failed to delete attachment (${res.status})`);
   }
+}
+
+async function _parseErrorDetail(res: Response, fallback: string): Promise<string> {
+  try {
+    const json = await res.json();
+    return json.message || json.detail || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function fetchBootstrapStatus(): Promise<BootstrapStatusResponse> {
+  const res = await fetch(`${API_BASE_URL}/auth/bootstrap-status`, {
+    cache: 'no-store',
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch bootstrap status');
+  }
+  return res.json();
+}
+
+export async function loginUser(email: string, password: string): Promise<AuthTokenResponse> {
+  const res = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    throw new Error(await _parseErrorDetail(res, `Login failed (${res.status})`));
+  }
+  return res.json();
+}
+
+export async function registerUser(params: {
+  email: string;
+  password: string;
+  fullName?: string;
+  workspaceName?: string;
+  invitationToken?: string;
+}): Promise<AuthTokenResponse> {
+  const res = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: params.email,
+      password: params.password,
+      full_name: params.fullName,
+      workspace_name: params.workspaceName,
+      invitation_token: params.invitationToken,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(await _parseErrorDetail(res, `Registration failed (${res.status})`));
+  }
+  return res.json();
+}
+
+export async function refreshAuthToken(): Promise<AuthTokenResponse> {
+  const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new Error('Session expired');
+  }
+  return res.json();
+}
+
+export async function logoutUser(): Promise<void> {
+  await fetch(`${API_BASE_URL}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+}
+
+export async function fetchCurrentUser(): Promise<AuthMeResponse> {
+  const res = await apiFetch(`${API_BASE_URL}/auth/me`, { cache: 'no-store' });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch user profile (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function listWorkspaces(): Promise<WorkspaceSummary[]> {
+  const res = await apiFetch(`${API_BASE_URL}/workspaces`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`Failed to load workspaces (${res.status})`);
+  return res.json();
+}
+
+export async function createWorkspace(name: string, planTier = 'team'): Promise<WorkspaceSummary> {
+  const res = await apiFetch(`${API_BASE_URL}/workspaces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, plan_tier: planTier }),
+  });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `Failed to create workspace (${res.status})`));
+  return res.json();
+}
+
+export async function listWorkspaceMembers(workspaceId: string): Promise<WorkspaceMemberDto[]> {
+  const res = await apiFetch(`${API_BASE_URL}/workspaces/${workspaceId}/members`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `Failed to list members (${res.status})`));
+  return res.json();
+}
+
+export async function updateWorkspaceMemberRole(
+  workspaceId: string,
+  userId: string,
+  role: string,
+): Promise<WorkspaceMemberDto> {
+  const res = await apiFetch(`${API_BASE_URL}/workspaces/${workspaceId}/members/${userId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role }),
+  });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `Failed to update role (${res.status})`));
+  return res.json();
+}
+
+export async function removeWorkspaceMember(workspaceId: string, userId: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE_URL}/workspaces/${workspaceId}/members/${userId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `Failed to remove member (${res.status})`));
+}
+
+export async function createWorkspaceInvitation(
+  workspaceId: string,
+  email: string,
+  role: string,
+): Promise<InvitationDto> {
+  const res = await apiFetch(`${API_BASE_URL}/workspaces/${workspaceId}/invitations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, role }),
+  });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `Failed to create invitation (${res.status})`));
+  return res.json();
+}
+
+export async function acceptWorkspaceInvitation(token: string): Promise<WorkspaceSummary> {
+  const res = await apiFetch(`${API_BASE_URL}/workspaces/invitations/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `Failed to accept invitation (${res.status})`));
+  return res.json();
+}
+
+export async function listWorkspaceApiKeys(workspaceId: string): Promise<ApiKeyDto[]> {
+  const res = await apiFetch(`${API_BASE_URL}/workspaces/${workspaceId}/api-keys`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `Failed to list API keys (${res.status})`));
+  return res.json();
+}
+
+export async function createWorkspaceApiKey(
+  workspaceId: string,
+  name: string,
+  scopes: string[],
+): Promise<ApiKeyCreatedDto> {
+  const res = await apiFetch(`${API_BASE_URL}/workspaces/${workspaceId}/api-keys`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, scopes }),
+  });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `Failed to create API key (${res.status})`));
+  return res.json();
+}
+
+export async function revokeWorkspaceApiKey(workspaceId: string, keyId: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE_URL}/workspaces/${workspaceId}/api-keys/${keyId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `Failed to revoke API key (${res.status})`));
+}
+
+export async function listWorkspaceAuditLogs(workspaceId: string, limit = 50): Promise<AuditLogDto[]> {
+  const res = await apiFetch(`${API_BASE_URL}/workspaces/${workspaceId}/audit-logs?limit=${limit}`, {
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `Failed to fetch audit logs (${res.status})`));
+  return res.json();
 }

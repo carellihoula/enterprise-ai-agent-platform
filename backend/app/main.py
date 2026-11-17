@@ -12,11 +12,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.agents import router as agents_router
 from app.api.v1.attachments import router as attachments_router
+from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.mcp import router as mcp_router
 from app.api.v1.memories import router as memories_router
 from app.api.v1.sessions import router as sessions_router
 from app.api.v1.tools import router as tools_router
+from app.api.v1.workspace import router as workspace_router
 from app.core.config import get_settings
 from app.core.database import init_db
 from app.core.errors import register_exception_handlers
@@ -59,6 +61,8 @@ app.add_middleware(
 register_exception_handlers(app)
 
 # [Routing] Include API v1 routers
+app.include_router(auth_router, prefix=settings.api_v1_prefix)
+app.include_router(workspace_router, prefix=settings.api_v1_prefix)
 app.include_router(chat_router, prefix=settings.api_v1_prefix)
 app.include_router(sessions_router, prefix=settings.api_v1_prefix)
 app.include_router(agents_router, prefix=settings.api_v1_prefix)

@@ -9,7 +9,10 @@ from typing import Annotated, Literal, cast
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.audit import record_audit_event
+from app.core.auth import AuthContext, require_permission
 from app.core.database import get_db
+from app.core.permissions import Permission
 from app.core.security import decrypt_api_key, encrypt_api_key, mask_api_key
 from app.models.agent import (
     AgentCreate,
@@ -75,37 +78,35 @@ def _to_response(agent: Agent) -> AgentResponse:
 
 
 @router.get("", response_model=list[AgentResponse], status_code=status.HTTP_200_OK)
-def list_agents(db: Annotated[Session, Depends(get_db)]) -> list[AgentResponse]:
-    """Retrieves all registered agents ordered by default status and creation date.
-
-    Args:
-        db (Session): Database session dependency.
-
-    Returns:
-        list[AgentResponse]: Array of all configured agent schemas.
-    """
-    # [Query] Return agents ordered by default flag first, then creation timestamp
-    records = db.query(Agent).order_by(Agent.is_default.desc(), Agent.created_at.asc()).all()
+def list_agents(
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.AGENTS_READ.value))],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[AgentResponse]:
+    """Retrieves all registered agents in the active workspace."""
+    # [Query] Scope agents strictly to the caller's active workspace
+    records = (
+        db.query(Agent)
+        .filter(Agent.workspace_id == ctx.workspace_id)
+        .order_by(Agent.is_default.desc(), Agent.created_at.asc())
+        .all()
+    )
     return [_to_response(record) for record in records]
 
 
 @router.post("", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
 def create_agent(
     payload: AgentCreate,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.AGENTS_WRITE.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> AgentResponse:
-    """Creates a new custom Enterprise AI Agent configuration.
-
-    Args:
-        payload (AgentCreate): Creation payload data.
-        db (Session): Database session dependency.
-
-    Returns:
-        AgentResponse: Newly persisted agent response with masked credentials.
-    """
-    # [Mutual Exclusivity] Unmark previous default if new agent is marked as default
+    """Creates a new custom Enterprise AI Agent configuration inside the active workspace."""
+    # [Mutual Exclusivity] Unmark previous default within this workspace only
     if payload.is_default:
-        db.query(Agent).filter(Agent.is_default == True).update({"is_default": False})  # noqa: E712
+        (
+            db.query(Agent)
+            .filter(Agent.workspace_id == ctx.workspace_id, Agent.is_default == True)  # noqa: E712
+            .update({"is_default": False})
+        )
 
     encrypted_key = (
         encrypt_api_key(payload.model.api_key.strip())
@@ -119,6 +120,8 @@ def create_agent(
     ]
 
     record = Agent(
+        workspace_id=ctx.workspace_id,
+        created_by=ctx.user_id,
         name=payload.name.strip(),
         description=payload.description.strip() if payload.description else None,
         avatar=payload.avatar or "Bot",
@@ -137,6 +140,16 @@ def create_agent(
         policies=payload.policies,
     )
     db.add(record)
+    db.flush()
+    record_audit_event(
+        db=db,
+        action="agent.create",
+        workspace_id=ctx.workspace_id,
+        actor_user_id=ctx.user_id,
+        resource_type="agent",
+        resource_id=record.id,
+        metadata={"name": record.name},
+    )
     db.commit()
     db.refresh(record)
 
@@ -146,21 +159,13 @@ def create_agent(
 @router.get("/{agent_id}", response_model=AgentResponse, status_code=status.HTTP_200_OK)
 def get_agent(
     agent_id: str,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.AGENTS_READ.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> AgentResponse:
-    """Retrieves an existing agent configuration by UUID.
-
-    Args:
-        agent_id (str): Primary key UUID of the agent.
-        db (Session): Database session dependency.
-
-    Returns:
-        AgentResponse: Found agent entity response.
-
-    Raises:
-        HTTPException: If the agent is not found.
-    """
-    record = db.query(Agent).filter(Agent.id == agent_id).first()
+    """Retrieves an existing agent configuration by UUID within the active workspace."""
+    record = (
+        db.query(Agent).filter(Agent.id == agent_id, Agent.workspace_id == ctx.workspace_id).first()
+    )
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -173,22 +178,13 @@ def get_agent(
 def update_agent(
     agent_id: str,
     payload: AgentUpdate,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.AGENTS_WRITE.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> AgentResponse:
-    """Updates an existing agent configuration.
-
-    Args:
-        agent_id (str): Primary key UUID of the agent to update.
-        payload (AgentUpdate): Partial update payload.
-        db (Session): Database session dependency.
-
-    Returns:
-        AgentResponse: Updated agent response.
-
-    Raises:
-        HTTPException: If the agent is not found.
-    """
-    record = db.query(Agent).filter(Agent.id == agent_id).first()
+    """Updates an existing agent configuration within the active workspace."""
+    record = (
+        db.query(Agent).filter(Agent.id == agent_id, Agent.workspace_id == ctx.workspace_id).first()
+    )
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -196,7 +192,11 @@ def update_agent(
         )
 
     if payload.is_default is True:
-        db.query(Agent).filter(Agent.is_default == True).update({"is_default": False})  # noqa: E712
+        (
+            db.query(Agent)
+            .filter(Agent.workspace_id == ctx.workspace_id, Agent.is_default == True)  # noqa: E712
+            .update({"is_default": False})
+        )
         record.is_default = True
     elif payload.is_default is False:
         record.is_default = False
@@ -244,23 +244,26 @@ def update_agent(
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_agent(
     agent_id: str,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.AGENTS_DELETE.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> None:
-    """Deletes an agent configuration permanently.
-
-    Args:
-        agent_id (str): Primary key UUID of the agent to delete.
-        db (Session): Database session dependency.
-
-    Raises:
-        HTTPException: If the agent is not found.
-    """
-    record = db.query(Agent).filter(Agent.id == agent_id).first()
+    """Deletes an agent configuration permanently from the active workspace."""
+    record = (
+        db.query(Agent).filter(Agent.id == agent_id, Agent.workspace_id == ctx.workspace_id).first()
+    )
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Agent '{agent_id}' not found",
         )
-
+    record_audit_event(
+        db=db,
+        action="agent.delete",
+        workspace_id=ctx.workspace_id,
+        actor_user_id=ctx.user_id,
+        resource_type="agent",
+        resource_id=record.id,
+        metadata={"name": record.name},
+    )
     db.delete(record)
     db.commit()

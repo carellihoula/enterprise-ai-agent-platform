@@ -12,7 +12,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.engine.builtin_tools import execute_builtin_tool, list_builtin_tools
-from app.main import app
 
 
 def _build_minimal_xlsx_b64() -> str:
@@ -216,9 +215,9 @@ async def test_web_search_returns_structured_results() -> None:
     assert res["results"][0]["url"] == "https://fastapi.tiangolo.com/"
 
 
-def test_builtin_tools_api_endpoints() -> None:
+def test_builtin_tools_api_endpoints(api_client: TestClient) -> None:
     """Verifies GET /api/v1/tools/builtin and POST /api/v1/tools/builtin/test endpoints."""
-    client = TestClient(app)
+    client = api_client
 
     list_resp = client.get("/api/v1/tools/builtin")
     assert list_resp.status_code == 200

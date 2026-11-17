@@ -9,7 +9,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.audit import record_audit_event
+from app.core.auth import AuthContext, require_permission
 from app.core.database import get_db
+from app.core.permissions import Permission
 from app.engine.mcp_client import probe_mcp_server
 from app.models.entities import Agent, McpServer
 from app.models.mcp import (
@@ -88,17 +91,15 @@ def _build_config_response(records: list[McpServer]) -> McpConfigResponse:
     return McpConfigResponse(servers=server_responses, mcpServers=mcp_map)
 
 
-def _query_scoped_servers(db: Session, agent_id: str | None) -> list[McpServer]:
-    """Queries MCP server records filtered by optional agent_id scope and ordered by sort_order.
-
-    Args:
-        db (Session): Active database session.
-        agent_id (str | None): Optional agent UUID scope, or None for the global workspace catalog.
-
-    Returns:
-        list[McpServer]: Ordered list of matching McpServer entities.
-    """
+def _query_scoped_servers(
+    db: Session,
+    agent_id: str | None,
+    workspace_id: str | None = None,
+) -> list[McpServer]:
+    """Queries MCP server records filtered by workspace and optional agent_id scope."""
     query = db.query(McpServer)
+    if workspace_id is not None:
+        query = query.filter(McpServer.workspace_id == workspace_id)
     if agent_id:
         return (
             query.filter(McpServer.agent_id == agent_id)
@@ -144,25 +145,19 @@ def _sync_agent_mcp_tools(db: Session, agent_id: str, records: list[McpServer]) 
 
 @router.get("", response_model=McpConfigResponse, status_code=status.HTTP_200_OK)
 def get_mcp_config(
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.MCP_READ.value))],
     db: Annotated[Session, Depends(get_db)],
     agent_id: Annotated[str | None, Query(description="Optional agent ID scope")] = None,
 ) -> McpConfigResponse:
-    """Retrieves the current MCP server configuration in both structured and mcp.json formats.
-
-    Args:
-        db (Session): Database session dependency.
-        agent_id (str | None): Optional agent UUID to scope configuration.
-
-    Returns:
-        McpConfigResponse: Current structured servers list and mcpServers dictionary.
-    """
-    records = _query_scoped_servers(db, agent_id)
+    """Retrieves the workspace MCP server configuration in structured and mcp.json formats."""
+    records = _query_scoped_servers(db, agent_id, workspace_id=ctx.workspace_id)
     return _build_config_response(records)
 
 
 @router.put("", response_model=McpConfigResponse, status_code=status.HTTP_200_OK)
 def sync_mcp_config(
     payload: McpConfigSyncRequest,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.MCP_MANAGE.value))],
     db: Annotated[Session, Depends(get_db)],
     agent_id: Annotated[str | None, Query(description="Optional agent ID scope")] = None,
 ) -> McpConfigResponse:
@@ -209,7 +204,7 @@ def sync_mcp_config(
             )
         seen_names.add(item.name)
 
-    existing_records = _query_scoped_servers(db, agent_id)
+    existing_records = _query_scoped_servers(db, agent_id, workspace_id=ctx.workspace_id)
     existing_by_id = {r.id: r for r in existing_records}
     existing_by_name = {r.name: r for r in existing_records}
 
@@ -262,6 +257,8 @@ def sync_mcp_config(
             updated_records.append(target)
         else:
             new_record = McpServer(
+                workspace_id=ctx.workspace_id,
+                created_by=ctx.user_id,
                 agent_id=agent_id,
                 name=item.name,
                 transport=item.type,
@@ -302,23 +299,12 @@ def sync_mcp_config(
 @router.post("/servers", response_model=McpServerResponse, status_code=status.HTTP_201_CREATED)
 def create_mcp_server(
     payload: McpServerPayload,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.MCP_MANAGE.value))],
     db: Annotated[Session, Depends(get_db)],
     agent_id: Annotated[str | None, Query(description="Optional agent ID scope")] = None,
 ) -> McpServerResponse:
-    """Creates a single MCP server configuration entry.
-
-    Args:
-        payload (McpServerPayload): New MCP server configuration payload.
-        db (Session): Database session dependency.
-        agent_id (str | None): Optional agent UUID scope.
-
-    Returns:
-        McpServerResponse: Newly persisted MCP server response.
-
-    Raises:
-        HTTPException: If a server with the same name already exists in the scope.
-    """
-    existing = _query_scoped_servers(db, agent_id)
+    """Creates a single MCP server configuration entry in the active workspace."""
+    existing = _query_scoped_servers(db, agent_id, workspace_id=ctx.workspace_id)
     if any(r.name == payload.name for r in existing):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -326,6 +312,8 @@ def create_mcp_server(
         )
 
     record = McpServer(
+        workspace_id=ctx.workspace_id,
+        created_by=ctx.user_id,
         agent_id=agent_id,
         name=payload.name,
         transport=payload.type,
@@ -339,6 +327,16 @@ def create_mcp_server(
         sort_order=len(existing),
     )
     db.add(record)
+    db.flush()
+    record_audit_event(
+        db=db,
+        action="mcp.create",
+        workspace_id=ctx.workspace_id,
+        actor_user_id=ctx.user_id,
+        resource_type="mcp_server",
+        resource_id=record.id,
+        metadata={"name": record.name, "transport": record.transport},
+    )
     db.commit()
     db.refresh(record)
     return _to_server_response(record)
@@ -350,29 +348,22 @@ def create_mcp_server(
 def update_mcp_server(
     server_id: str,
     payload: McpServerPayload,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.MCP_MANAGE.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> McpServerResponse:
-    """Updates an existing MCP server configuration by ID.
-
-    Args:
-        server_id (str): Primary key UUID of the MCP server.
-        payload (McpServerPayload): Updated MCP server fields.
-        db (Session): Database session dependency.
-
-    Returns:
-        McpServerResponse: Updated MCP server response.
-
-    Raises:
-        HTTPException: If the server is not found or the new name conflicts with another server.
-    """
-    record = db.query(McpServer).filter(McpServer.id == server_id).first()
+    """Updates an existing MCP server configuration by ID within the active workspace."""
+    record = (
+        db.query(McpServer)
+        .filter(McpServer.id == server_id, McpServer.workspace_id == ctx.workspace_id)
+        .first()
+    )
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"MCP server '{server_id}' not found.",
         )
 
-    siblings = _query_scoped_servers(db, record.agent_id)
+    siblings = _query_scoped_servers(db, record.agent_id, workspace_id=ctx.workspace_id)
     if any(s.id != server_id and s.name == payload.name for s in siblings):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -397,24 +388,30 @@ def update_mcp_server(
 @router.delete("/servers/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_mcp_server(
     server_id: str,
+    ctx: Annotated[AuthContext, Depends(require_permission(Permission.MCP_MANAGE.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> None:
-    """Deletes an MCP server configuration permanently.
-
-    Args:
-        server_id (str): Primary key UUID of the MCP server to delete.
-        db (Session): Database session dependency.
-
-    Raises:
-        HTTPException: If the MCP server is not found.
-    """
-    record = db.query(McpServer).filter(McpServer.id == server_id).first()
+    """Deletes an MCP server configuration permanently from the active workspace."""
+    record = (
+        db.query(McpServer)
+        .filter(McpServer.id == server_id, McpServer.workspace_id == ctx.workspace_id)
+        .first()
+    )
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"MCP server '{server_id}' not found.",
         )
 
+    record_audit_event(
+        db=db,
+        action="mcp.delete",
+        workspace_id=ctx.workspace_id,
+        actor_user_id=ctx.user_id,
+        resource_type="mcp_server",
+        resource_id=record.id,
+        metadata={"name": record.name},
+    )
     db.delete(record)
     db.commit()
 
@@ -422,6 +419,7 @@ def delete_mcp_server(
 @router.post("/test", response_model=McpTestResponse, status_code=status.HTTP_200_OK)
 async def test_mcp_server_connection(
     payload: McpServerPayload,
+    _ctx: Annotated[AuthContext, Depends(require_permission(Permission.MCP_MANAGE.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> McpTestResponse:
     """Tests a live MCP server connection and returns handshake status and discovered tools.
