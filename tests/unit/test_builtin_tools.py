@@ -224,12 +224,13 @@ def test_builtin_tools_api_endpoints() -> None:
     assert list_resp.status_code == 200
     items: list[dict[str, Any]] = list_resp.json()
     names = {item["name"] for item in items}
-    assert len(list_builtin_tools()) == 7
+    assert len(list_builtin_tools()) == 8
     assert names == {
         "get_current_datetime",
         "calculator",
         "fetch_webpage",
         "parse_csv_excel",
+        "analyze_spreadsheet",
         "extract_pdf_text",
         "json_query",
         "web_search",
