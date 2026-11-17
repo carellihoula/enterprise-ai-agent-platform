@@ -514,7 +514,7 @@ export async function deleteChatAttachment(attachmentId: string): Promise<void> 
 async function _parseErrorDetail(res: Response, fallback: string): Promise<string> {
   try {
     const json = await res.json();
-    return json.message || json.detail || fallback;
+    return json.error?.message || json.message || json.detail || fallback;
   } catch {
     return fallback;
   }

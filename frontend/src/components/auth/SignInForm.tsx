@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { AlertCircle, Building2, Eye, EyeOff, Info, KeyRound } from "lucide-react";
+import { toast } from "@/components/ui/toast";
 
 interface SignInFormProps {
   authMode: string;
@@ -54,10 +55,17 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
     try {
       await onLogin(cleanEmail, password);
     } catch (err) {
-      setAlertState({
-        type: "err",
-        msg: err instanceof Error ? err.message : "Identifiant ou mot de passe incorrect.",
+      const rawMsg = err instanceof Error ? err.message : "Identifiant ou mot de passe incorrect.";
+      const friendlyMsg =
+        rawMsg.toLowerCase().includes("invalid email or password")
+          ? "Identifiant ou mot de passe incorrect."
+          : rawMsg;
+      toast.add({
+        title: "Connexion impossible",
+        description: friendlyMsg,
+        variant: "destructive",
       });
+      setAlertState({ type: "err", msg: friendlyMsg });
     } finally {
       setIsSubmitting(false);
     }

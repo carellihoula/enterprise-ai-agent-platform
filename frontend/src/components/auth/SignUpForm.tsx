@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { AlertCircle, Check, Circle, Eye, EyeOff, Info } from "lucide-react";
+import { toast } from "@/components/ui/toast";
 
 interface SignUpFormProps {
   needsSetup: boolean;
@@ -106,10 +107,19 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
         invitationToken: invitationToken.trim() || undefined,
       });
     } catch (err) {
-      setAlertState({
-        type: "err",
-        msg: err instanceof Error ? err.message : "La création du compte a échoué.",
+      const rawMsg = err instanceof Error ? err.message : "La création du compte a échoué.";
+      const isExisting =
+        rawMsg.toLowerCase().includes("already exists") || rawMsg.includes("409");
+      const friendlyMsg = isExisting
+        ? "Un compte existe déjà avec cette adresse e-mail. Connectez-vous ou utilisez une autre adresse."
+        : rawMsg;
+
+      toast.add({
+        title: isExisting ? "Compte existant" : "Création impossible",
+        description: friendlyMsg,
+        variant: "destructive",
       });
+      setAlertState({ type: "err", msg: friendlyMsg });
     } finally {
       setIsSubmitting(false);
     }
