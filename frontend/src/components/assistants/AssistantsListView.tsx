@@ -1,6 +1,9 @@
+"use client";
+
 import React from "react";
 import { Plus, Bot, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 import { AssistantCard } from "./AssistantCard";
 import { AssistantsListViewProps } from "./types";
 
@@ -17,6 +20,9 @@ export const AssistantsListView: React.FC<AssistantsListViewProps> = ({
   onChatWithAssistant,
   isLoading = false,
 }) => {
+  const { hasPermission } = useAuth();
+  const canWriteAgents = hasPermission("agents:write");
+
   return (
     <div className="flex-1 overflow-y-auto bg-white p-4 sm:p-6 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -28,14 +34,16 @@ export const AssistantsListView: React.FC<AssistantsListViewProps> = ({
             </h1>
           </div>
 
-          <Button
-            size="sm"
-            onClick={onCreateAssistant}
-            className="bg-zinc-900 hover:bg-zinc-800 text-white text-xs rounded-md font-medium px-3.5 py-1.5 gap-1.5 shadow-none shrink-0 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5 text-white" />
-            <span>Create Agent</span>
-          </Button>
+          {canWriteAgents && (
+            <Button
+              size="sm"
+              onClick={onCreateAssistant}
+              className="bg-zinc-900 hover:bg-zinc-800 text-white text-xs rounded-md font-medium px-3.5 py-1.5 gap-1.5 shadow-none shrink-0 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5 text-white" />
+              <span>Create Agent</span>
+            </Button>
+          )}
         </div>
 
         {/* Content State: Loading, Empty, or Grid of Cards */}

@@ -40,6 +40,10 @@ export function setAuthSession(accessToken: string | null, workspaceId: string |
   _activeWorkspaceId = workspaceId;
 }
 
+export function setActiveWorkspaceId(workspaceId: string | null): void {
+  _activeWorkspaceId = workspaceId;
+}
+
 export function clearAuthSession(): void {
   _accessToken = null;
   _activeWorkspaceId = null;
@@ -549,6 +553,7 @@ export async function registerUser(params: {
   password: string;
   fullName?: string;
   workspaceName?: string;
+  planTier?: string;
   invitationToken?: string;
 }): Promise<AuthTokenResponse> {
   const res = await fetch(`${API_BASE_URL}/auth/register`, {
@@ -560,6 +565,7 @@ export async function registerUser(params: {
       password: params.password,
       full_name: params.fullName,
       workspace_name: params.workspaceName,
+      plan_tier: params.planTier,
       invitation_token: params.invitationToken,
     }),
   });
@@ -694,5 +700,56 @@ export async function listWorkspaceAuditLogs(workspaceId: string, limit = 50): P
     cache: 'no-store',
   });
   if (!res.ok) throw new Error(await _parseErrorDetail(res, `Failed to fetch audit logs (${res.status})`));
+  return res.json();
+}
+
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `Request failed (${res.status})`));
+  return res.json();
+}
+
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `Reset failed (${res.status})`));
+}
+
+export async function discoverOidc(params: {
+  email?: string;
+  provider?: string;
+}): Promise<{
+  configured: boolean;
+  provider_label: string;
+  authorize_url?: string | null;
+  message?: string | null;
+}> {
+  const res = await fetch(`${API_BASE_URL}/auth/oidc/discover`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) throw new Error(await _parseErrorDetail(res, `OIDC discovery failed (${res.status})`));
+  return res.json();
+}
+
+export function getBackendOrigin(): string {
+  return API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+}
+
+export async function fetchSystemHealth(): Promise<{
+  status: string;
+  app_name: string;
+  environment: string;
+}> {
+  const res = await fetch(`${getBackendOrigin()}/health`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`Service unreachable (${res.status})`);
   return res.json();
 }

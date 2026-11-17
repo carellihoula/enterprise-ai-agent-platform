@@ -10,6 +10,7 @@ import { McpJsonEditor } from "./McpJsonEditor";
 import { McpFooterBar } from "./McpFooterBar";
 import { validateMcpServer } from "./mcpUtils";
 import { Agent } from "@/types/agent";
+import { useAuth } from "@/contexts/AuthContext";
 
 const COMMAND_SUGGESTIONS = ["npx", "uvx", "node", "python", "docker", "bunx"];
 
@@ -22,6 +23,8 @@ export interface McpConfigViewProps {
  * with synchronized Form and JSON editing modes.
  */
 export const McpConfigView: React.FC<McpConfigViewProps> = () => {
+  const { hasPermission } = useAuth();
+  const canManageMcp = hasPermission("mcp:manage");
   const {
     servers,
     mode,

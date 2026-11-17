@@ -32,6 +32,7 @@ from app.models.auth import (
     WorkspaceInvitation,
     WorkspaceMember,
 )
+from app.services.email_service import send_workspace_invitation_email
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 
@@ -408,6 +409,12 @@ def create_invitation(
     )
     db.commit()
     db.refresh(inv)
+    send_workspace_invitation_email(
+        to_email=inv.email,
+        workspace_name=ctx.workspace_name,
+        role=inv.role,
+        invite_token=raw_token,
+    )
 
     return InvitationResponse(
         id=inv.id,

@@ -264,3 +264,45 @@ def test_rbac_team_isolation_api_keys_and_audit_logs(
         } <= actions
     finally:
         app.dependency_overrides.clear()
+
+
+def test_social_oauth_discovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verifies Google/GitHub/Microsoft OAuth2 discovery when unconfigured vs configured."""
+    from pydantic import SecretStr
+
+    from app.api.v1 import auth as auth_router_mod
+    from app.core.config import Settings
+
+    client = _create_auth_test_client(tmp_path, monkeypatch)
+    try:
+        monkeypatch.setattr(
+            auth_router_mod, "get_settings", lambda: Settings(deployment_mode="saas")
+        )
+        res_saas = client.post("/api/v1/auth/oidc/discover", json={"provider": "Google"})
+        assert res_saas.status_code == 200
+        assert res_saas.json()["configured"] is False
+        assert "GOOGLE_CLIENT_ID" not in (res_saas.json()["message"] or "")
+        assert ".env" not in (res_saas.json()["message"] or "")
+
+        monkeypatch.setattr(
+            auth_router_mod, "get_settings", lambda: Settings(deployment_mode="self_hosted")
+        )
+        res_unconf = client.post("/api/v1/auth/oidc/discover", json={"provider": "Google"})
+        assert res_unconf.status_code == 200
+        assert res_unconf.json()["configured"] is False
+        assert "GOOGLE_CLIENT_ID" in (res_unconf.json()["message"] or "")
+
+        monkeypatch.setattr(
+            auth_router_mod,
+            "get_settings",
+            lambda: Settings(
+                google_client_id="test-google-client-id",
+                google_client_secret=SecretStr("test-google-secret"),
+            ),
+        )
+        res_conf = client.post("/api/v1/auth/oidc/discover", json={"provider": "Google"})
+        assert res_conf.status_code == 200
+        assert res_conf.json()["configured"] is True
+        assert res_conf.json()["authorize_url"] == "/api/v1/auth/oauth/google/login"
+    finally:
+        app.dependency_overrides.clear()

@@ -58,7 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
               variant="ghost"
               size="icon"
               onClick={onToggleSidebar}
-              title="Ouvrir la barre latérale"
+              title="Open sidebar"
               className="h-8 w-8 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-md shrink-0"
             >
               <PanelLeftOpen className="w-4 h-4" />

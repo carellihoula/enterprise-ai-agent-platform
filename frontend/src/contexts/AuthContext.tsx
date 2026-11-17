@@ -10,6 +10,7 @@ import {
   logoutUser,
   refreshAuthToken,
   registerUser,
+  setActiveWorkspaceId,
   setAuthSession,
   setOnUnauthorizedCallback,
 } from "@/lib/api";
@@ -32,6 +33,7 @@ interface AuthContextValue {
     password: string;
     fullName?: string;
     workspaceName?: string;
+    planTier?: string;
     invitationToken?: string;
   }) => Promise<void>;
   logout: () => Promise<void>;
@@ -135,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       password: string;
       fullName?: string;
       workspaceName?: string;
+      planTier?: string;
       invitationToken?: string;
     }) => {
       const data = await registerUser(params);
@@ -153,8 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const switchWorkspace = useCallback(
     async (workspaceId: string) => {
-      const refreshed = await refreshAuthToken();
-      setAuthSession(refreshed.access_token, workspaceId);
+      setActiveWorkspaceId(workspaceId);
       await syncFromMe();
     },
     [syncFromMe],

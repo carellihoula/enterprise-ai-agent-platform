@@ -6,6 +6,7 @@ All code modifications, new files, docstrings, and inline comments in this repos
 
 ## 1. Primary Language Requirement
 - **English Only**: All source code, docstrings, inline comments, variable names, function names, commit messages, and documentation files must be written **EXCLUSIVELY in English**.
+- **English-Only UI, API & Emails**: All user-facing UI text (labels, buttons, placeholders, tooltips, modals, validation errors, and toast notifications), backend API response/error messages, and transactional email templates must be written **EXCLUSIVELY in English**. Never introduce French or other non-English copy into the frontend or backend, even when the user communicates in another language.
 
 ---
 

@@ -11,32 +11,43 @@ type AuthViewMode = "signin" | "signup" | "forgot" | "sso";
 
 export const LoginView: React.FC = () => {
   const { login, register, needsSetup, authMode, allowPublicSignup } = useAuth();
-  const [view, setView] = useState<AuthViewMode>(needsSetup ? "signup" : "signin");
+  const initialParams =
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const resetTokenParam = initialParams?.get("reset_token");
+  const inviteTokenParam = initialParams?.get("invite_token");
+
+  const [view, setView] = useState<AuthViewMode>(
+    resetTokenParam
+      ? "forgot"
+      : inviteTokenParam || needsSetup
+        ? "signup"
+        : "signin",
+  );
 
   const activeView: AuthViewMode = needsSetup ? "signup" : view;
 
   const instanceLabel =
     needsSetup
-      ? "instance · configuration initiale"
+      ? "instance · initial setup"
       : authMode === "oidc"
-        ? "instance · sso imposé"
+        ? "instance · sso enforced"
         : null;
 
   const belowContent = (() => {
     if (needsSetup) return null;
     if (authMode === "oidc") {
-      return "Pas d’accès ? Demandez une invitation à l’administrateur de votre organisation.";
+      return "Need access? Request an invitation from your organization administrator.";
     }
     if (activeView === "signin") {
       return (
         <>
-          Nouveau ici ?{" "}
+          New here?{" "}
           <button
             type="button"
             onClick={() => setView("signup")}
             className="font-medium text-[#0969da] hover:underline cursor-pointer"
           >
-            {allowPublicSignup ? "Créer un compte" : "S’inscrire avec invitation"}
+            {allowPublicSignup ? "Create an account" : "Sign up with an invitation"}
           </button>
         </>
       );
@@ -44,13 +55,13 @@ export const LoginView: React.FC = () => {
     if (activeView === "signup") {
       return (
         <>
-          Déjà inscrit ?{" "}
+          Already have an account?{" "}
           <button
             type="button"
             onClick={() => setView("signin")}
             className="font-medium text-[#0969da] hover:underline cursor-pointer"
           >
-            Se connecter
+            Sign in
           </button>
         </>
       );
@@ -67,10 +78,16 @@ export const LoginView: React.FC = () => {
         <SignUpForm
           needsSetup={needsSetup}
           allowPublicSignup={allowPublicSignup}
+          initialInviteToken={inviteTokenParam}
           onRegister={register}
         />
       )}
-      {activeView === "forgot" && <ForgotPasswordView onBack={() => setView("signin")} />}
+      {activeView === "forgot" && (
+        <ForgotPasswordView
+          initialResetToken={resetTokenParam}
+          onBack={() => setView("signin")}
+        />
+      )}
       {activeView === "sso" && <SsoLookupView onBack={() => setView("signin")} />}
     </AuthShell>
   );

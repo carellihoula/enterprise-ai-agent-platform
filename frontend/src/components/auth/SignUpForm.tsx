@@ -3,15 +3,18 @@
 import React, { useMemo, useState } from "react";
 import { AlertCircle, Check, Circle, Eye, EyeOff, Info } from "lucide-react";
 import { toast } from "@/components/ui/toast";
+import { discoverOidc, getBackendOrigin } from "@/lib/api";
 
 interface SignUpFormProps {
   needsSetup: boolean;
   allowPublicSignup: boolean;
+  initialInviteToken?: string | null;
   onRegister: (params: {
     email: string;
     password: string;
     fullName?: string;
     workspaceName?: string;
+    planTier?: string;
     invitationToken?: string;
   }) => Promise<void>;
 }
@@ -39,17 +42,18 @@ const SOCIAL_PROVIDERS = [
 function computeStrength(pw: string): { score: number; label: string; isCommon: boolean } {
   const lower = pw.toLowerCase();
   const isCommon = COMMON_PASSWORDS.has(lower) || /^(.)\1+$/.test(pw);
-  if (!pw) return { score: 0, label: "Au moins 12 caractères", isCommon: false };
-  if (isCommon) return { score: 1, label: "Trop faible", isCommon: true };
-  if (pw.length >= 16) return { score: 4, label: "Très solide", isCommon: false };
-  if (pw.length >= 12) return { score: 3, label: "Solide", isCommon: false };
-  if (pw.length >= 8) return { score: 2, label: "Moyen, ajoutez des caractères", isCommon: false };
-  return { score: 1, label: "Trop faible", isCommon: false };
+  if (!pw) return { score: 0, label: "At least 12 characters", isCommon: false };
+  if (isCommon) return { score: 1, label: "Too weak", isCommon: true };
+  if (pw.length >= 16) return { score: 4, label: "Very strong", isCommon: false };
+  if (pw.length >= 12) return { score: 3, label: "Strong", isCommon: false };
+  if (pw.length >= 8) return { score: 2, label: "Fair, add more characters", isCommon: false };
+  return { score: 1, label: "Too weak", isCommon: false };
 }
 
 export const SignUpForm: React.FC<SignUpFormProps> = ({
   needsSetup,
   allowPublicSignup,
+  initialInviteToken,
   onRegister,
 }) => {
   const [usage, setUsage] = useState<"me" | "team">("me");
@@ -58,8 +62,10 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
-  const [invitationToken, setInvitationToken] = useState("");
-  const [showInviteField, setShowInviteField] = useState(!allowPublicSignup && !needsSetup);
+  const [invitationToken, setInvitationToken] = useState(initialInviteToken || "");
+  const [showInviteField, setShowInviteField] = useState(
+    Boolean(initialInviteToken) || (!allowPublicSignup && !needsSetup),
+  );
   const [showPw, setShowPw] = useState(false);
   const [alertState, setAlertState] = useState<{ type: "err" | "info"; msg: string } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -72,25 +78,25 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
     e.preventDefault();
     const errs: Record<string, string> = {};
     if (usage === "team" && !workspaceName.trim()) {
-      errs.org = "Indiquez le nom de votre organisation.";
+      errs.org = "Please enter your organization name.";
     }
     if (!fullName.trim()) {
-      errs.name = "Indiquez votre nom.";
+      errs.name = "Please enter your full name.";
     }
     if (!EMAIL_RE.test(email.trim())) {
-      errs.email = "Saisissez une adresse e-mail valide.";
+      errs.email = "Please enter a valid email address.";
     }
     if (password.length < 8 || strength.isCommon) {
       errs.pw =
         password.length < 8
-          ? "Le mot de passe doit contenir au moins 8 caractères."
-          : "Ce mot de passe est trop courant.";
+          ? "Password must be at least 8 characters long."
+          : "This password is too common.";
     }
     if (!termsAccepted) {
-      errs.terms = "Vous devez accepter les conditions pour continuer.";
+      errs.terms = "You must accept the terms to continue.";
     }
     if (!needsSetup && !allowPublicSignup && !invitationToken.trim()) {
-      errs.inv = "Un jeton d'invitation est requis.";
+      errs.inv = "An invitation token is required.";
     }
 
     setFieldErrors(errs);
@@ -104,18 +110,19 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
         password,
         fullName: fullName.trim() || undefined,
         workspaceName: workspaceName.trim() || undefined,
+        planTier: usage === "team" ? "team" : "personal",
         invitationToken: invitationToken.trim() || undefined,
       });
     } catch (err) {
-      const rawMsg = err instanceof Error ? err.message : "La création du compte a échoué.";
+      const rawMsg = err instanceof Error ? err.message : "Account creation failed.";
       const isExisting =
         rawMsg.toLowerCase().includes("already exists") || rawMsg.includes("409");
       const friendlyMsg = isExisting
-        ? "Un compte existe déjà avec cette adresse e-mail. Connectez-vous ou utilisez une autre adresse."
+        ? "An account already exists with this email address. Please sign in or use another address."
         : rawMsg;
 
       toast.add({
-        title: isExisting ? "Compte existant" : "Création impossible",
+        title: isExisting ? "Account already exists" : "Registration failed",
         description: friendlyMsg,
         variant: "destructive",
       });
@@ -129,12 +136,12 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
     <>
       <div className="flex flex-col">
         <h1 className="m-0 text-[22px] leading-[1.25] font-semibold tracking-[-0.02em] text-[#1f2328]">
-          {needsSetup ? "Initialiser l’instance" : "Créer votre compte"}
+          {needsSetup ? "Initialize instance" : "Create your account"}
         </h1>
         <p className="mt-1 text-[#59636e]">
           {needsSetup
-            ? "Créez le premier compte administrateur."
-            : "Quelques secondes suffisent."}
+            ? "Create the first administrator account."
+            : "It only takes a few seconds."}
         </p>
       </div>
 
@@ -142,7 +149,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
         <div className="flex gap-[10px] items-start px-3 py-[10px] border border-[#0550ae] rounded-[8px] bg-[#ddf4ff] text-[13px]">
           <Info className="w-4 h-4 text-[#0550ae] shrink-0 mt-0.5" />
           <span className="text-[#1f2328]">
-            Ce premier compte devient automatiquement Propriétaire et Super-Administrateur.
+            This first account automatically becomes Owner and Super Admin.
           </span>
         </div>
       )}
@@ -172,13 +179,26 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
               <button
                 key={s.name}
                 type="button"
-                onClick={() =>
-                  setAlertState({
-                    type: "info",
-                    msg: `L'inscription via ${s.name} nécessite OIDC/OAuth (Phase 2). Inscrivez-vous avec votre e-mail ci-dessous.`,
-                  })
-                }
-                aria-label={`Continuer avec ${s.name}`}
+                onClick={async () => {
+                  try {
+                    const res = await discoverOidc({ provider: s.name });
+                    if (res.configured && res.authorize_url) {
+                      window.location.href = `${getBackendOrigin()}${res.authorize_url}`;
+                      return;
+                    }
+                    setAlertState({
+                      type: "info",
+                      msg: res.message || `${s.name} SSO is not configured.`,
+                    });
+                  } catch (err) {
+                    toast.add({
+                      title: "SSO unavailable",
+                      description: err instanceof Error ? err.message : "OIDC error",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                aria-label={`Continue with ${s.name}`}
                 className="h-[36px] px-2 inline-flex items-center justify-center gap-[6px] border border-[#d1d9e0] rounded-[6px] bg-white text-[13px] font-medium hover:bg-[#f6f8fa] cursor-pointer"
               >
                 <span className="grid place-items-center w-[18px] h-[18px] rounded-[4px] bg-[#eaeef2] font-mono text-[9px] font-semibold text-[#59636e]">
@@ -190,13 +210,13 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
           </div>
 
           <div className="flex items-center gap-3 text-[12px] text-[#59636e] before:content-[''] before:flex-1 before:h-px before:bg-[#d1d9e0] after:content-[''] after:flex-1 after:h-px after:bg-[#d1d9e0]">
-            <span>ou avec votre e-mail</span>
+            <span>or with your email</span>
           </div>
         </>
       )}
 
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 m-0">
-        <fieldset className="grid grid-cols-2 gap-2 border-0 m-0 p-0" aria-label="Type d’usage">
+        <fieldset className="grid grid-cols-2 gap-2 border-0 m-0 p-0" aria-label="Account type">
           <label
             className={`relative flex flex-col gap-[2px] px-3 py-[10px] border rounded-[8px] cursor-pointer ${
               usage === "me"
@@ -211,8 +231,8 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
               onChange={() => setUsage("me")}
               className="sr-only"
             />
-            <b className="text-[13px] font-semibold text-[#1f2328]">Personnel</b>
-            <span className="text-[12px] text-[#59636e]">Un espace pour vous seul</span>
+            <b className="text-[13px] font-semibold text-[#1f2328]">Personal</b>
+            <span className="text-[12px] text-[#59636e]">A workspace just for you</span>
           </label>
 
           <label
@@ -229,15 +249,15 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
               onChange={() => setUsage("team")}
               className="sr-only"
             />
-            <b className="text-[13px] font-semibold text-[#1f2328]">Équipe</b>
-            <span className="text-[12px] text-[#59636e]">Invitez vos collègues</span>
+            <b className="text-[13px] font-semibold text-[#1f2328]">Team</b>
+            <span className="text-[12px] text-[#59636e]">Invite your colleagues</span>
           </label>
         </fieldset>
 
         {usage === "team" && (
           <div className="flex flex-col gap-[6px]">
             <label htmlFor="signup-org" className="text-[13px] font-medium text-[#1f2328]">
-              Nom de l’organisation
+              Organization name
             </label>
             <input
               id="signup-org"
@@ -255,7 +275,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
 
         <div className="flex flex-col gap-[6px]">
           <label htmlFor="signup-name" className="text-[13px] font-medium text-[#1f2328]">
-            Nom complet
+            Full name
           </label>
           <input
             id="signup-name"
@@ -271,7 +291,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
 
         <div className="flex flex-col gap-[6px]">
           <label htmlFor="signup-email" className="text-[13px] font-medium text-[#1f2328]">
-            Adresse e-mail
+            Email address
           </label>
           <input
             id="signup-email"
@@ -286,7 +306,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
           />
           {usage === "team" && (
             <p className="m-0 text-[12px] text-[#59636e]">
-              Utilisez votre adresse professionnelle : votre domaine pourra être rattaché à l’organisation.
+              Use your work email address so your domain can be linked to your organization.
             </p>
           )}
           {fieldErrors.email && <p className="m-0 text-[12px] text-[#cf222e]">{fieldErrors.email}</p>}
@@ -294,7 +314,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
 
         <div className="flex flex-col gap-[6px]">
           <label htmlFor="signup-pw" className="text-[13px] font-medium text-[#1f2328]">
-            Mot de passe
+            Password
           </label>
           <div className="relative">
             <input
@@ -310,7 +330,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
             <button
               type="button"
               onClick={() => setShowPw((p) => !p)}
-              aria-label={showPw ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+              aria-label={showPw ? "Hide password" : "Show password"}
               className="absolute right-[3px] top-[3px] grid place-items-center w-[30px] h-[30px] rounded-[5px] text-[#59636e] hover:bg-[#eaeef2] hover:text-[#1f2328] cursor-pointer"
             >
               {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -328,7 +348,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
           <ul className="flex flex-col gap-[2px] m-0 p-0 list-none text-[12px] text-[#59636e]">
             <li className={`flex items-center gap-[6px] ${password.length >= 12 ? "text-[#1a7f37]" : ""}`}>
               {password.length >= 12 ? <Check className="w-3 h-3" /> : <Circle className="w-2.5 h-2.5" />}
-              <span>12 caractères recommandés (8 minimum)</span>
+              <span>12 characters recommended (8 minimum)</span>
             </li>
             <li
               className={`flex items-center gap-[6px] ${password && !strength.isCommon ? "text-[#1a7f37]" : ""}`}
@@ -338,7 +358,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
               ) : (
                 <Circle className="w-2.5 h-2.5" />
               )}
-              <span>Absent des mots de passe courants</span>
+              <span>Not a common password</span>
             </li>
           </ul>
           {fieldErrors.pw && <p className="m-0 text-[12px] text-[#cf222e]">{fieldErrors.pw}</p>}
@@ -347,7 +367,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
         {(showInviteField || (!allowPublicSignup && !needsSetup)) ? (
           <div className="flex flex-col gap-[6px]">
             <label htmlFor="signup-inv" className="text-[13px] font-medium text-[#1f2328]">
-              Jeton d’invitation {allowPublicSignup || needsSetup ? "(optionnel)" : "(requis)"}
+              Invitation token {allowPublicSignup || needsSetup ? "(optional)" : "(required)"}
             </label>
             <input
               id="signup-inv"
@@ -366,7 +386,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
             onClick={() => setShowInviteField(true)}
             className="self-start text-[12px] font-medium text-[#0969da] hover:underline cursor-pointer"
           >
-            Vous avez un jeton d’invitation ?
+            Have an invitation token?
           </button>
         ) : null}
 
@@ -378,7 +398,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
               onChange={(e) => setTermsAccepted(e.target.checked)}
               className="w-4 h-4 mt-[2px] accent-[#1f2328]"
             />
-            <span>J’accepte les conditions d’utilisation et la politique de confidentialité.</span>
+            <span>I accept the Terms of Service and Privacy Policy.</span>
           </label>
           {fieldErrors.terms && <p className="m-0 text-[12px] text-[#cf222e]">{fieldErrors.terms}</p>}
         </div>
@@ -391,7 +411,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
           {isSubmitting && (
             <span className="inline-block w-[14px] h-[14px] border-2 border-current border-t-transparent rounded-full animate-spin" />
           )}
-          <span>{needsSetup ? "Créer le compte administrateur" : "Créer mon compte"}</span>
+          <span>{needsSetup ? "Create administrator account" : "Create my account"}</span>
         </button>
       </form>
     </>

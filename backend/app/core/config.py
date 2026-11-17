@@ -116,6 +116,10 @@ class Settings(BaseSettings):
         default="local",
         description="Authentication mode ('local' email/password, 'oidc' SSO only, or 'hybrid')",
     )
+    deployment_mode: Literal["saas", "self_hosted"] = Field(
+        default="saas",
+        description="Deployment profile ('saas' for multi-tenant cloud, 'self_hosted' for on-prem)",
+    )
     allow_public_signup: bool = Field(
         default=True,
         description="Allow self-service registration after initial admin bootstrap",
@@ -163,6 +167,66 @@ class Settings(BaseSettings):
     oidc_redirect_uri: str | None = Field(
         default=None,
         description="Optional OIDC callback redirect URI",
+    )
+    backend_url: str = Field(
+        default="http://localhost:8000",
+        description="Public base URL of the backend API used for OAuth callbacks",
+    )
+    google_client_id: str | None = Field(
+        default=None,
+        description="Google OAuth2 client ID",
+    )
+    google_client_secret: SecretStr | None = Field(
+        default=None,
+        description="Google OAuth2 client secret",
+    )
+    github_client_id: str | None = Field(
+        default=None,
+        description="GitHub OAuth2 client ID",
+    )
+    github_client_secret: SecretStr | None = Field(
+        default=None,
+        description="GitHub OAuth2 client secret",
+    )
+    microsoft_client_id: str | None = Field(
+        default=None,
+        description="Microsoft Entra ID OAuth2 client ID",
+    )
+    microsoft_client_secret: SecretStr | None = Field(
+        default=None,
+        description="Microsoft Entra ID OAuth2 client secret",
+    )
+    microsoft_tenant_id: str = Field(
+        default="common",
+        description="Microsoft Entra tenant ID ('common', 'organizations', or tenant UUID)",
+    )
+    frontend_url: str = Field(
+        default="http://localhost:3000",
+        description="Base URL of the frontend application used in email links",
+    )
+    smtp_host: str | None = Field(
+        default=None,
+        description="SMTP server hostname (e.g., localhost for Mailpit, smtp.resend.com in prod)",
+    )
+    smtp_port: int = Field(
+        default=1025,
+        description="SMTP server TCP port",
+    )
+    smtp_user: str | None = Field(
+        default=None,
+        description="Optional SMTP authentication username",
+    )
+    smtp_password: SecretStr | None = Field(
+        default=None,
+        description="Optional SMTP authentication password",
+    )
+    smtp_from: str = Field(
+        default="noreply@enterprise-ai.local",
+        description="Default sender email address",
+    )
+    smtp_use_tls: bool = Field(
+        default=False,
+        description="Enable STARTTLS when connecting to SMTP",
     )
     config_file_path: Path | None = Field(
         default=None,

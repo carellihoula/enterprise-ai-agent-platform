@@ -44,12 +44,26 @@ services:
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-ai-platform-uploads}
       - S3_REGION=${S3_REGION:-us-east-1}
       - S3_USE_SSL=${S3_USE_SSL:-false}
+      - SMTP_HOST=${SMTP_HOST:-mailpit}
+      - SMTP_PORT=${SMTP_PORT:-1025}
+      - SMTP_FROM=${SMTP_FROM:-noreply@enterprise-ai.local}
+      - SMTP_USE_TLS=${SMTP_USE_TLS:-false}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
     ports:
       - "8000:8000"
     depends_on:
       - postgres
       - redis
       - minio
+      - mailpit
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: ai_platform_mailpit
+    restart: always
+    ports:
+      - "1025:1025"
+      - "8025:8025"
 
   minio:
     image: minio/minio:latest

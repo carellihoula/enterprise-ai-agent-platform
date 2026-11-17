@@ -23,6 +23,8 @@ import { BuiltinToolsView } from "@/components/tools";
 import { LoginView } from "@/components/auth/LoginView";
 import { WorkspaceSettingsView } from "@/components/workspace";
 import { useAuth } from "@/contexts/AuthContext";
+import { acceptWorkspaceInvitation } from "@/lib/api";
+import { toast } from "@/components/ui/toast";
 import {
   EngineSubBar,
   ChatPlaygroundView,
@@ -48,7 +50,33 @@ export default function EnterpriseAppPage() {
 }
 
 function AuthenticatedAppShell() {
+  const { refreshProfile, switchWorkspace } = useAuth();
   const [activeTab, setActiveTab] = useState<NavTabId>("home");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const inviteToken = params.get("invite_token");
+    if (!inviteToken) return;
+
+    window.history.replaceState({}, "", window.location.pathname);
+    acceptWorkspaceInvitation(inviteToken)
+      .then(async (joined) => {
+        await refreshProfile();
+        await switchWorkspace(joined.id);
+        toast.add({
+          title: "Workspace rejoint",
+          description: `Vous avez rejoint '${joined.name}' (${joined.role}).`,
+          variant: "success",
+        });
+      })
+      .catch((err) => {
+        toast.add({
+          title: "Invitation invalide",
+          description: err instanceof Error ? err.message : "Impossible d'accepter l'invitation.",
+          variant: "destructive",
+        });
+      });
+  }, [refreshProfile, switchWorkspace]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);

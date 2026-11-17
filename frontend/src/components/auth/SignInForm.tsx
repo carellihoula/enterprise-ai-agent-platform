@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { AlertCircle, Building2, Eye, EyeOff, Info, KeyRound } from "lucide-react";
 import { toast } from "@/components/ui/toast";
+import { discoverOidc, getBackendOrigin } from "@/lib/api";
 
 interface SignInFormProps {
   authMode: string;
@@ -35,14 +36,14 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
     let valid = true;
 
     if (!EMAIL_RE.test(cleanEmail)) {
-      setEmailErr("Saisissez une adresse e-mail valide.");
+      setEmailErr("Please enter a valid email address.");
       valid = false;
     } else {
       setEmailErr(null);
     }
 
     if (!password) {
-      setPwErr("Saisissez votre mot de passe.");
+      setPwErr("Please enter your password.");
       valid = false;
     } else {
       setPwErr(null);
@@ -55,13 +56,13 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
     try {
       await onLogin(cleanEmail, password);
     } catch (err) {
-      const rawMsg = err instanceof Error ? err.message : "Identifiant ou mot de passe incorrect.";
+      const rawMsg = err instanceof Error ? err.message : "Invalid email or password.";
       const friendlyMsg =
         rawMsg.toLowerCase().includes("invalid email or password")
-          ? "Identifiant ou mot de passe incorrect."
+          ? "Invalid email or password."
           : rawMsg;
       toast.add({
-        title: "Connexion impossible",
+        title: "Sign-in failed",
         description: friendlyMsg,
         variant: "destructive",
       });
@@ -77,7 +78,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
         <div className="flex flex-col gap-[6px] min-w-0">
           <div className="flex justify-between items-baseline gap-2">
             <label htmlFor="signin-email" className="text-[13px] font-medium text-[#1f2328]">
-              Adresse e-mail
+              Email address
             </label>
           </div>
           <input
@@ -91,7 +92,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
               setEmail(e.target.value);
               setEmailErr(null);
             }}
-            placeholder={authMode === "oidc" ? "admin@entreprise.com" : undefined}
+            placeholder={authMode === "oidc" ? "admin@company.com" : undefined}
             aria-invalid={Boolean(emailErr)}
             className="w-full h-[36px] px-3 border border-[#d1d9e0] rounded-[6px] bg-white text-[#1f2328] placeholder:text-[#59636e]/70 focus:outline-none focus:border-[#0969da] focus:shadow-[0_0_0_3px_rgba(9,105,218,0.25)] aria-[invalid=true]:border-[#cf222e]"
           />
@@ -101,7 +102,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
         <div className="flex flex-col gap-[6px] min-w-0">
           <div className="flex justify-between items-baseline gap-2">
             <label htmlFor="signin-pw" className="text-[13px] font-medium text-[#1f2328]">
-              Mot de passe
+              Password
             </label>
             {showForgotLink && (
               <button
@@ -109,7 +110,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
                 onClick={() => onNavigate("forgot")}
                 className="text-[13px] font-medium text-[#0969da] hover:underline cursor-pointer"
               >
-                Mot de passe oublié ?
+                Forgot password?
               </button>
             )}
           </div>
@@ -132,7 +133,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
             <button
               type="button"
               onClick={() => setShowPw((prev) => !prev)}
-              aria-label={showPw ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+              aria-label={showPw ? "Hide password" : "Show password"}
               className="absolute right-[3px] top-[3px] grid place-items-center w-[30px] h-[30px] rounded-[5px] text-[#59636e] hover:bg-[#eaeef2] hover:text-[#1f2328] cursor-pointer"
             >
               {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -141,7 +142,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
           {capsLock && (
             <p className="m-0 text-[12px] text-[#9a6700] flex items-center gap-1">
               <AlertCircle className="w-3 h-3" />
-              <span>Verr. Maj. activé</span>
+              <span>Caps Lock is on</span>
             </p>
           )}
           {pwErr && <p className="m-0 text-[12px] text-[#cf222e]">{pwErr}</p>}
@@ -155,7 +156,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
           {isSubmitting && (
             <span className="inline-block w-[14px] h-[14px] border-2 border-current border-t-transparent rounded-full animate-spin" />
           )}
-          <span>{isSubmitting ? "Connexion…" : "Se connecter"}</span>
+          <span>{isSubmitting ? "Signing in…" : "Sign in"}</span>
         </button>
       </form>
     );
@@ -166,10 +167,10 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
       <>
         <div className="flex flex-col">
           <h1 className="m-0 text-[22px] leading-[1.25] font-semibold tracking-[-0.02em] text-[#1f2328]">
-            Connexion
+            Sign in
           </h1>
           <p className="mt-1 text-[#59636e]">
-            Votre organisation impose la connexion unique (SSO).
+            Your organization enforces Single Sign-On (SSO).
           </p>
         </div>
 
@@ -179,13 +180,13 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
           className="w-full h-[36px] inline-flex items-center justify-center gap-2 px-[14px] border border-[#1f2328] rounded-[6px] bg-[#1f2328] text-white text-[13px] font-medium hover:opacity-88 cursor-pointer"
         >
           <Building2 className="w-[15px] h-[15px]" />
-          <span>Continuer avec le SSO</span>
+          <span>Continue with SSO</span>
         </button>
 
         <div className="flex gap-[10px] items-start px-3 py-[10px] border border-[#0550ae] rounded-[8px] bg-[#ddf4ff] text-[13px]">
           <Info className="w-4 h-4 text-[#0550ae] shrink-0 mt-0.5" />
           <span className="text-[#1f2328]">
-            Les comptes locaux sont désactivés par votre administrateur.
+            Local accounts are disabled by your administrator.
           </span>
         </div>
 
@@ -196,7 +197,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
               onClick={() => setBreakGlass(true)}
               className="text-[#59636e] font-medium hover:underline cursor-pointer"
             >
-              Accès de secours administrateur
+              Administrator emergency access
             </button>
           </p>
         ) : (
@@ -213,7 +214,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
             <div className="flex gap-[10px] items-start px-3 py-[10px] border border-[#9a6700] rounded-[8px] bg-[#fff8c5] text-[13px]">
               <AlertCircle className="w-4 h-4 text-[#9a6700] shrink-0 mt-0.5" />
               <span className="text-[#1f2328]">
-                Accès de secours réservé aux administrateurs. Chaque connexion est journalisée.
+                Emergency access reserved for administrators. Every sign-in is logged.
               </span>
             </div>
             {renderPasswordForm(false)}
@@ -227,9 +228,9 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
     <>
       <div className="flex flex-col">
         <h1 className="m-0 text-[22px] leading-[1.25] font-semibold tracking-[-0.02em] text-[#1f2328]">
-          Connexion
+          Sign in
         </h1>
-        <p className="mt-1 text-[#59636e]">Accédez à votre espace de travail.</p>
+        <p className="mt-1 text-[#59636e]">Access your workspace.</p>
       </div>
 
       {alertState && (
@@ -255,13 +256,26 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
           <button
             key={s.name}
             type="button"
-            onClick={() =>
-              setAlertState({
-                type: "info",
-                msg: `La connexion via ${s.name} nécessite OIDC/OAuth (Phase 2). Connectez-vous avec votre e-mail ci-dessous.`,
-              })
-            }
-            aria-label={`Continuer avec ${s.name}`}
+            onClick={async () => {
+              try {
+                const res = await discoverOidc({ provider: s.name });
+                if (res.configured && res.authorize_url) {
+                  window.location.href = `${getBackendOrigin()}${res.authorize_url}`;
+                  return;
+                }
+                setAlertState({
+                  type: "info",
+                  msg: res.message || `${s.name} SSO is not configured.`,
+                });
+              } catch (err) {
+                toast.add({
+                  title: "SSO unavailable",
+                  description: err instanceof Error ? err.message : "OIDC error",
+                  variant: "destructive",
+                });
+              }
+            }}
+            aria-label={`Continue with ${s.name}`}
             className="h-[36px] px-2 inline-flex items-center justify-center gap-[6px] border border-[#d1d9e0] rounded-[6px] bg-white text-[13px] font-medium hover:bg-[#f6f8fa] cursor-pointer"
           >
             <span className="grid place-items-center w-[18px] h-[18px] rounded-[4px] bg-[#eaeef2] font-mono text-[9px] font-semibold text-[#59636e]">
@@ -277,29 +291,29 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
         onClick={() =>
           setAlertState({
             type: "info",
-            msg: "Les clés d'accès (WebAuthn/Passkeys) seront activées prochainement. Utilisez votre e-mail ci-dessous.",
+            msg: "Passkeys (WebAuthn) will be enabled soon. Please sign in with your email below.",
           })
         }
         className="w-full h-[36px] px-[14px] inline-flex items-center justify-center gap-2 border border-[#d1d9e0] rounded-[6px] bg-white text-[13px] font-medium hover:bg-[#f6f8fa] cursor-pointer"
       >
         <KeyRound className="w-[15px] h-[15px]" />
-        <span>Se connecter avec une clé d’accès</span>
+        <span>Sign in with a passkey</span>
       </button>
 
       <div className="flex items-center gap-3 text-[12px] text-[#59636e] before:content-[''] before:flex-1 before:h-px before:bg-[#d1d9e0] after:content-[''] after:flex-1 after:h-px after:bg-[#d1d9e0]">
-        <span>ou avec votre e-mail</span>
+        <span>or with your email</span>
       </div>
 
       {renderPasswordForm(true)}
 
       <p className="m-0 text-center text-[13px] text-[#59636e]">
-        Votre organisation utilise le SSO ?{" "}
+        Does your organization use SSO?{" "}
         <button
           type="button"
           onClick={() => onNavigate("sso")}
           className="font-medium text-[#0969da] hover:underline cursor-pointer"
         >
-          Connexion SSO
+          SSO sign in
         </button>
       </p>
     </>
