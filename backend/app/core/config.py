@@ -152,6 +152,10 @@ class Settings(BaseSettings):
         default=None,
         description="Optional full Redis connection URL overriding host and port",
     )
+    rate_limit_enabled: bool = Field(
+        default=True,
+        description="Enable SlowAPI HTTP rate limiting on protected endpoints",
+    )
     oidc_issuer_url: str | None = Field(
         default=None,
         description="Optional OIDC discovery issuer URL for enterprise SSO",

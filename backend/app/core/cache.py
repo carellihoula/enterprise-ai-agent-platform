@@ -27,7 +27,6 @@ class AuthCache:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._mem_kv: dict[str, tuple[str, float]] = {}
-        self._mem_counters: dict[str, tuple[int, float]] = {}
         self._redis_client: redis.Redis | None = None
         self._redis_checked = False
 
@@ -150,58 +149,10 @@ class AuthCache:
         """
         self.delete(f"api_key:{key_hash}")
 
-    def check_rate_limit(
-        self,
-        bucket_key: str,
-        max_attempts: int,
-        window_seconds: int,
-    ) -> tuple[bool, int]:
-        """Increments a fixed-window rate limit counter and reports whether access is allowed.
-
-        Args:
-            bucket_key (str): Identifier for the rate-limit bucket (e.g., ``login:<ip>``).
-            max_attempts (int): Maximum allowed attempts within the window.
-            window_seconds (int): Window duration in seconds.
-
-        Returns:
-            tuple[bool, int]: ``(allowed, retry_after_seconds)``.
-        """
-        redis_key = f"rl:{bucket_key}"
-        client = self._get_redis()
-        if client is not None:
-            try:
-                count_raw = client.incr(redis_key)
-                count = int(count_raw) if isinstance(count_raw, int | str) else 1
-                if count == 1:
-                    client.expire(redis_key, window_seconds)
-                if count > max_attempts:
-                    ttl_raw = client.ttl(redis_key)
-                    ttl = (
-                        int(ttl_raw) if isinstance(ttl_raw, int) and ttl_raw > 0 else window_seconds
-                    )
-                    return False, ttl
-                return True, 0
-            except Exception:
-                pass
-
-        now = time.monotonic()
-        with self._lock:
-            current = self._mem_counters.get(redis_key)
-            if not current or now >= current[1]:
-                self._mem_counters[redis_key] = (1, now + window_seconds)
-                return True, 0
-            count, expires_at = current
-            new_count = count + 1
-            self._mem_counters[redis_key] = (new_count, expires_at)
-            if new_count > max_attempts:
-                return False, max(1, int(expires_at - now))
-            return True, 0
-
     def reset_memory_store(self) -> None:
-        """Clears in-memory cache and rate-limit counters (intended for unit tests)."""
+        """Clears in-memory cache entries (intended for unit tests)."""
         with self._lock:
             self._mem_kv.clear()
-            self._mem_counters.clear()
 
 
 # [Singleton] Shared auth cache instance used across security dependencies and endpoints

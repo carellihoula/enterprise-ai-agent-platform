@@ -3,13 +3,24 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthContext, require_permission
 from app.core.database import get_db
 from app.core.permissions import Permission
+from app.core.rate_limit import get_rate_limit_key, limiter
 from app.models.entities import ChatAttachment
 from app.services.attachment_service import save_uploaded_attachment
 from app.services.storage_service import get_storage_backend
@@ -39,7 +50,10 @@ class AttachmentResponse(BaseModel):
     status_code=status.HTTP_201_CREATED,
     summary="Upload a chat file or image attachment",
 )
+@limiter.limit("20/minute", key_func=get_rate_limit_key)
 async def upload_attachment(
+    request: Request,
+    response: Response,
     ctx: Annotated[AuthContext, Depends(require_permission(Permission.ATTACHMENTS_WRITE.value))],
     db: Annotated[Session, Depends(get_db)],
     file: Annotated[UploadFile, File(...)],

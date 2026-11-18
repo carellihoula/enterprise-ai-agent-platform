@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 
 
 class PlatformError(Exception):
@@ -204,3 +205,26 @@ def register_exception_handlers(app: FastAPI) -> None:
                 }
             },
         )
+
+    # [Handler] Map SlowAPI RateLimitExceeded to the uniform platform error schema
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_exception_handler(
+        request: Request, exc: RateLimitExceeded
+    ) -> JSONResponse:
+        response = JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "error": {
+                    "code": "RATE_LIMITED",
+                    "message": f"Rate limit exceeded: {exc.detail}",
+                    "retryable": True,
+                    "details": {"limit": str(exc.detail)},
+                    "path": str(request.url.path),
+                }
+            },
+        )
+        view_rate_limit = getattr(request.state, "view_rate_limit", None)
+        limiter = getattr(request.app.state, "limiter", None)
+        if limiter is not None and view_rate_limit is not None:
+            response = limiter._inject_headers(response, view_rate_limit)
+        return response

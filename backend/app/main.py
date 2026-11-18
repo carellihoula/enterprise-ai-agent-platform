@@ -22,6 +22,7 @@ from app.api.v1.workspace import router as workspace_router
 from app.core.config import get_settings
 from app.core.database import init_db
 from app.core.errors import register_exception_handlers
+from app.core.rate_limit import limiter
 
 # [Initialization] Load global settings singleton
 settings = get_settings()
@@ -57,7 +58,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# [Security] Register domain exception handlers for uniform error formatting
+# [Security] Register rate limiter state and domain exception handlers
+app.state.limiter = limiter
 register_exception_handlers(app)
 
 # [Routing] Include API v1 routers

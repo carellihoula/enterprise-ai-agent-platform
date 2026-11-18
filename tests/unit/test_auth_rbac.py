@@ -306,3 +306,35 @@ def test_social_oauth_discovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         assert res_conf.json()["authorize_url"] == "/api/v1/auth/oauth/google/login"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_auth_rate_limiting_with_slowapi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verifies SlowAPI enforces per-IP limits and returns standard 429 JSON + headers."""
+    from app.core.rate_limit import limiter
+
+    client = _create_auth_test_client(tmp_path, monkeypatch)
+    limiter._storage.reset()
+    try:
+        headers = {"X-Forwarded-For": "203.0.113.42"}
+        for _ in range(5):
+            ok_resp = client.post(
+                "/api/v1/auth/forgot-password",
+                json={"email": "nobody@example.com"},
+                headers=headers,
+            )
+            assert ok_resp.status_code == 200
+            assert "x-ratelimit-limit" in {k.lower() for k in ok_resp.headers}
+
+        blocked_resp = client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": "nobody@example.com"},
+            headers=headers,
+        )
+        assert blocked_resp.status_code == 429
+        body = blocked_resp.json()
+        assert body["error"]["code"] == "RATE_LIMITED"
+        assert body["error"]["retryable"] is True
+        assert "retry-after" in {k.lower() for k in blocked_resp.headers}
+    finally:
+        limiter._storage.reset()
+        app.dependency_overrides.clear()

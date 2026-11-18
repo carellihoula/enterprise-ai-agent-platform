@@ -33,6 +33,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.errors import DomainError
 from app.core.permissions import WorkspaceRole
+from app.core.rate_limit import limiter
 from app.models.auth import (
     RefreshToken,
     User,
@@ -259,6 +260,7 @@ def get_bootstrap_status(db: Annotated[Session, Depends(get_db)]) -> BootstrapSt
 
 
 @router.post("/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 def register(
     payload: RegisterRequest,
     request: Request,
@@ -277,16 +279,6 @@ def register(
         AuthTokenResponse: Access token, user profile, and workspace list.
     """
     ip = _client_ip(request)
-    allowed, retry_after = auth_cache.check_rate_limit(
-        f"register:{ip or 'unknown'}", max_attempts=10, window_seconds=60
-    )
-    if not allowed:
-        raise DomainError(
-            f"Too many registration attempts. Retry in {retry_after}s.",
-            error_code="RATE_LIMITED",
-            status_code=429,
-        )
-
     settings = get_settings()
     if settings.auth_mode == "oidc":
         raise DomainError("Local registration is disabled in OIDC-only mode.", status_code=403)
@@ -418,6 +410,7 @@ def register(
 
 
 @router.post("/login", response_model=AuthTokenResponse)
+@limiter.limit("10/minute")
 def login(
     payload: LoginRequest,
     request: Request,
@@ -437,16 +430,6 @@ def login(
     """
     ip = _client_ip(request)
     email = _normalize_email(payload.email)
-
-    allowed, retry_after = auth_cache.check_rate_limit(
-        f"login:{ip or 'unknown'}:{email}", max_attempts=10, window_seconds=60
-    )
-    if not allowed:
-        raise DomainError(
-            f"Too many login attempts. Retry in {retry_after}s.",
-            error_code="RATE_LIMITED",
-            status_code=429,
-        )
 
     user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(payload.password, user.password_hash):
@@ -603,23 +586,15 @@ def get_me(
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
+@limiter.limit("5/minute")
 def forgot_password(
     payload: ForgotPasswordRequest,
     request: Request,
+    response: Response,
     db: Annotated[Session, Depends(get_db)],
 ) -> ForgotPasswordResponse:
     """Issues a short-lived password reset token and emails the reset link via SMTP."""
     ip = _client_ip(request)
-    allowed, retry_after = auth_cache.check_rate_limit(
-        f"forgot:{ip or 'unknown'}", max_attempts=5, window_seconds=60
-    )
-    if not allowed:
-        raise DomainError(
-            f"Too many password reset requests. Retry in {retry_after}s.",
-            error_code="RATE_LIMITED",
-            status_code=429,
-        )
-
     email = _normalize_email(payload.email)
     user = db.query(User).filter(User.email == email, User.is_active == True).first()  # noqa: E712
 

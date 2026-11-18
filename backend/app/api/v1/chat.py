@@ -10,7 +10,7 @@ import logging
 from collections.abc import AsyncGenerator
 from typing import Annotated, Any, Literal, cast
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -21,6 +21,7 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal, get_db
 from app.core.errors import DomainError
 from app.core.permissions import Permission
+from app.core.rate_limit import get_rate_limit_key, limiter
 from app.core.security import decrypt_api_key
 from app.engine.langchain_tools import (
     build_builtin_structured_tool,
@@ -723,22 +724,25 @@ async def resolve_tool_approval(
 
 
 @router.post("", response_model=ChatResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("30/minute", key_func=get_rate_limit_key)
 async def generate_chat(
-    request: ChatRequest,
+    request: Request,
+    response: Response,
+    payload: ChatRequest,
     ctx: Annotated[AuthContext, Depends(require_permission(Permission.CHAT_RUN.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> ChatResponse:
     """Synchronous chat endpoint generating a complete response."""
     resolved_api_key, resolved_base_url, resolved_system_prompt = _resolve_provider_credentials(
-        request, db, workspace_id=ctx.workspace_id
+        payload, db, workspace_id=ctx.workspace_id
     )
-    target_agent = _resolve_target_agent(request, db, workspace_id=ctx.workspace_id)
+    target_agent = _resolve_target_agent(payload, db, workspace_id=ctx.workspace_id)
     resolved_enable_reasoning = (
-        request.enable_reasoning
-        if request.enable_reasoning is not None
+        payload.enable_reasoning
+        if payload.enable_reasoning is not None
         else (target_agent.enable_reasoning if target_agent else False)
     )
-    raw_effort = request.reasoning_effort or (
+    raw_effort = payload.reasoning_effort or (
         target_agent.reasoning_effort if target_agent else "medium"
     )
     resolved_reasoning_effort = cast(
@@ -746,34 +750,34 @@ async def generate_chat(
         raw_effort if raw_effort in ("low", "medium", "high") else "medium",
     )
     provider = _get_provider(
-        request.provider_name,
-        request.model_name,
+        payload.provider_name,
+        payload.model_name,
         api_key=resolved_api_key,
         base_url=resolved_base_url,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
+        temperature=payload.temperature,
+        max_tokens=payload.max_tokens,
         system_instruction=resolved_system_prompt,
         enable_reasoning=resolved_enable_reasoning,
         reasoning_effort=resolved_reasoning_effort,
     )
     agent_policy = parse_agent_policies(target_agent.policies if target_agent else None)
     agent_tools = await build_langchain_tools_for_agent(target_agent, db)
-    _inject_spreadsheet_tool_if_needed(db, request.session_id, request.attachment_ids, agent_tools)
+    _inject_spreadsheet_tool_if_needed(db, payload.session_id, payload.attachment_ids, agent_tools)
     full_messages, target_session_id, history_budget = _prepare_messages_context(
-        request.messages,
-        request.session_id,
+        payload.messages,
+        payload.session_id,
         db,
-        model_name=request.model_name,
+        model_name=payload.model_name,
         system_prompt=resolved_system_prompt,
         tools=agent_tools,
-        max_output_tokens=request.max_tokens,
+        max_output_tokens=payload.max_tokens,
         agent_id=target_agent.id if target_agent else None,
         workspace_id=ctx.workspace_id,
         user_id=ctx.user_id,
     )
     _attach_files_to_last_user_message(
         db,
-        request.attachment_ids,
+        payload.attachment_ids,
         full_messages,
         dlp_active=agent_policy.dlp_filter_active,
         workspace_id=ctx.workspace_id,
@@ -804,19 +808,19 @@ async def generate_chat(
             await _persist_chat_turn(
                 db=db,
                 session_id=target_session_id,
-                request_messages=request.messages,
+                request_messages=payload.messages,
                 assistant_content=final_text,
                 provider=provider,
                 trace_steps=recorded_steps or None,
                 history_budget=history_budget,
                 agent_id=target_agent.id if target_agent else None,
                 policy=agent_policy,
-                attachment_ids=request.attachment_ids,
+                attachment_ids=payload.attachment_ids,
             )
         return ChatResponse(
             content=final_text,
-            provider_name=request.provider_name,
-            model_name=request.model_name,
+            provider_name=payload.provider_name,
+            model_name=payload.model_name,
             usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
             finish_reason="stop",
             session_id=target_session_id,
@@ -824,8 +828,8 @@ async def generate_chat(
 
     model_response: ModelResponse = await provider.generate(
         messages=full_messages,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
+        temperature=payload.temperature,
+        max_tokens=payload.max_tokens,
         system_instruction=resolved_system_prompt,
     )
 
@@ -834,18 +838,18 @@ async def generate_chat(
         await _persist_chat_turn(
             db=db,
             session_id=target_session_id,
-            request_messages=request.messages,
+            request_messages=payload.messages,
             assistant_content=model_response.content,
             provider=provider,
             history_budget=history_budget,
             agent_id=target_agent.id if target_agent else None,
             policy=agent_policy,
-            attachment_ids=request.attachment_ids,
+            attachment_ids=payload.attachment_ids,
         )
 
     return ChatResponse(
         content=model_response.content,
-        provider_name=request.provider_name,
+        provider_name=payload.provider_name,
         model_name=model_response.model_name,
         usage={
             "prompt_tokens": model_response.usage.prompt_tokens,
@@ -858,22 +862,24 @@ async def generate_chat(
 
 
 @router.post("/stream", status_code=status.HTTP_200_OK)
+@limiter.limit("30/minute", key_func=get_rate_limit_key)
 async def stream_chat(
-    request: ChatRequest,
+    request: Request,
+    payload: ChatRequest,
     ctx: Annotated[AuthContext, Depends(require_permission(Permission.CHAT_RUN.value))],
     db: Annotated[Session, Depends(get_db)],
 ) -> StreamingResponse:
     """Streaming chat endpoint serving real-time Server-Sent Events (SSE)."""
     resolved_api_key, resolved_base_url, resolved_system_prompt = _resolve_provider_credentials(
-        request, db, workspace_id=ctx.workspace_id
+        payload, db, workspace_id=ctx.workspace_id
     )
-    target_agent = _resolve_target_agent(request, db, workspace_id=ctx.workspace_id)
+    target_agent = _resolve_target_agent(payload, db, workspace_id=ctx.workspace_id)
     resolved_enable_reasoning = (
-        request.enable_reasoning
-        if request.enable_reasoning is not None
+        payload.enable_reasoning
+        if payload.enable_reasoning is not None
         else (target_agent.enable_reasoning if target_agent else False)
     )
-    raw_effort = request.reasoning_effort or (
+    raw_effort = payload.reasoning_effort or (
         target_agent.reasoning_effort if target_agent else "medium"
     )
     resolved_reasoning_effort = cast(
@@ -881,34 +887,34 @@ async def stream_chat(
         raw_effort if raw_effort in ("low", "medium", "high") else "medium",
     )
     provider = _get_provider(
-        request.provider_name,
-        request.model_name,
+        payload.provider_name,
+        payload.model_name,
         api_key=resolved_api_key,
         base_url=resolved_base_url,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
+        temperature=payload.temperature,
+        max_tokens=payload.max_tokens,
         system_instruction=resolved_system_prompt,
         enable_reasoning=resolved_enable_reasoning,
         reasoning_effort=resolved_reasoning_effort,
     )
     agent_policy = parse_agent_policies(target_agent.policies if target_agent else None)
     agent_tools = await build_langchain_tools_for_agent(target_agent, db)
-    _inject_spreadsheet_tool_if_needed(db, request.session_id, request.attachment_ids, agent_tools)
+    _inject_spreadsheet_tool_if_needed(db, payload.session_id, payload.attachment_ids, agent_tools)
     full_messages, target_session_id, history_budget = _prepare_messages_context(
-        request.messages,
-        request.session_id,
+        payload.messages,
+        payload.session_id,
         db,
-        model_name=request.model_name,
+        model_name=payload.model_name,
         system_prompt=resolved_system_prompt,
         tools=agent_tools,
-        max_output_tokens=request.max_tokens,
+        max_output_tokens=payload.max_tokens,
         agent_id=target_agent.id if target_agent else None,
         workspace_id=ctx.workspace_id,
         user_id=ctx.user_id,
     )
     _attach_files_to_last_user_message(
         db,
-        request.attachment_ids,
+        payload.attachment_ids,
         full_messages,
         dlp_active=agent_policy.dlp_filter_active,
         workspace_id=ctx.workspace_id,
@@ -920,7 +926,7 @@ async def stream_chat(
         accumulated_content = ""
         recorded_steps: list[dict[str, Any]] = []
         logger.info(
-            f"[Stream] Starting stream for provider='{request.provider_name}', model='{request.model_name}'"
+            f"[Stream] Starting stream for provider='{payload.provider_name}', model='{payload.model_name}'"
         )
         try:
             if agent_tools and isinstance(provider, LangChainModelProvider):
@@ -953,8 +959,8 @@ async def stream_chat(
             else:
                 async for chunk in provider.stream(
                     messages=full_messages,
-                    temperature=request.temperature,
-                    max_tokens=request.max_tokens,
+                    temperature=payload.temperature,
+                    max_tokens=payload.max_tokens,
                     system_instruction=resolved_system_prompt,
                 ):
                     if chunk.delta_reasoning and resolved_enable_reasoning:
@@ -981,14 +987,14 @@ async def stream_chat(
                     await _persist_chat_turn(
                         db=db_session,
                         session_id=target_session_id,
-                        request_messages=request.messages,
+                        request_messages=payload.messages,
                         assistant_content=accumulated_content,
                         provider=provider,
                         trace_steps=recorded_steps or None,
                         history_budget=history_budget,
                         agent_id=target_agent.id if target_agent else None,
                         policy=agent_policy,
-                        attachment_ids=request.attachment_ids,
+                        attachment_ids=payload.attachment_ids,
                     )
                     logger.info(f"[Stream] Saved messages to session_id='{target_session_id}'")
                 finally:
