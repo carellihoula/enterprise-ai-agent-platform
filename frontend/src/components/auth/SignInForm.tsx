@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { AlertCircle, Building2, Eye, EyeOff, Info, KeyRound } from "lucide-react";
 import { toast } from "@/components/ui/toast";
-import { discoverOidc, getBackendOrigin } from "@/lib/api";
+import { SocialAuthButtons } from "./SocialAuthButtons";
 
 interface SignInFormProps {
   authMode: string;
@@ -12,12 +12,6 @@ interface SignInFormProps {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-const SOCIAL_PROVIDERS = [
-  { name: "Google", chip: "G" },
-  { name: "GitHub", chip: "GH" },
-  { name: "Microsoft", chip: "M" },
-] as const;
 
 export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNavigate }) => {
   const [email, setEmail] = useState("");
@@ -251,40 +245,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ authMode, onLogin, onNav
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-2">
-        {SOCIAL_PROVIDERS.map((s) => (
-          <button
-            key={s.name}
-            type="button"
-            onClick={async () => {
-              try {
-                const res = await discoverOidc({ provider: s.name });
-                if (res.configured && res.authorize_url) {
-                  window.location.href = `${getBackendOrigin()}${res.authorize_url}`;
-                  return;
-                }
-                setAlertState({
-                  type: "info",
-                  msg: res.message || `${s.name} SSO is not configured.`,
-                });
-              } catch (err) {
-                toast.add({
-                  title: "SSO unavailable",
-                  description: err instanceof Error ? err.message : "OIDC error",
-                  variant: "destructive",
-                });
-              }
-            }}
-            aria-label={`Continue with ${s.name}`}
-            className="h-[36px] px-2 inline-flex items-center justify-center gap-[6px] border border-[#d1d9e0] rounded-[6px] bg-white text-[13px] font-medium hover:bg-[#f6f8fa] cursor-pointer"
-          >
-            <span className="grid place-items-center w-[18px] h-[18px] rounded-[4px] bg-[#eaeef2] font-mono text-[9px] font-semibold text-[#59636e]">
-              {s.chip}
-            </span>
-            <span className="max-[440px]:hidden">{s.name}</span>
-          </button>
-        ))}
-      </div>
+      <SocialAuthButtons onInfoMessage={(msg) => setAlertState({ type: "info", msg })} />
 
       <button
         type="button"
